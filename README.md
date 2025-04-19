@@ -1,5 +1,4 @@
-Luau ![CI](https://github.com/luau-lang/luau/actions/workflows/build.yml/badge.svg) [![codecov](https://codecov.io/gh/luau-lang/luau/branch/master/graph/badge.svg)](https://codecov.io/gh/luau-lang/luau)
-====
+# Luau (Next Generation)
 
 Luau (lowercase u, /ˈlu.aʊ/) is a fast, small, safe, gradually typed embeddable scripting language derived from [Lua](https://lua.org).
 
@@ -9,7 +8,7 @@ Luau is used by Roblox game developers to write game code, and by Roblox enginee
 
 This repository hosts source code for the language implementation and associated tooling. Documentation for the language is available at https://luau.org/ and accepts contributions via [site repository](https://github.com/luau-lang/site); the language is evolved through RFCs that are located in [rfcs repository](https://github.com/luau-lang/rfcs).
 
-# Usage
+## Usage
 
 Luau is an embeddable programming language, but it also comes with two command-line tools by default, `luau` and `luau-analyze`.
 
@@ -17,34 +16,18 @@ Luau is an embeddable programming language, but it also comes with two command-l
 
 `luau-analyze` is a command-line type checker and linter; given a set of input files, it produces errors/warnings according to the file configuration, which can be customized by using `--!` comments in the files or [`.luaurc`](https://rfcs.luau.org/config-luaurc) files. For details, please refer to our [type checking](https://luau.org/typecheck) and [linting](https://luau.org/lint) documentation. Our community maintains a language server frontend for `luau-analyze` called [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) for use with text editors.
 
-# Installation
+## Installation
 
-You can install and run Luau by downloading the compiled binaries from [a recent release](https://github.com/luau-lang/luau/releases); note that `luau` and `luau-analyze` binaries from the archives will need to be added to PATH or copied to a directory like `/usr/local/bin` on Linux/macOS.
-
-Alternatively, you can use one of the packaged distributions (note that these are not maintained by Luau development team):
-
-- macOS: [Install Homebrew](https://docs.brew.sh/Installation) and run `brew install luau`
-- Arch Linux: Luau has been added to the official Arch Linux packages repository under the extras repository (see [``luau``](https://archlinux.org/packages/extra/x86_64/luau/)), simply install using ``pacman``: ``pacman -Syu luau``
-- Alpine Linux: [Enable community repositories](https://wiki.alpinelinux.org/w/index.php?title=Enable_Community_Repository) and run `apk add luau`
-- Gentoo Linux: Luau is [officially packaged by Gentoo](https://packages.gentoo.org/packages/dev-lang/luau) and can be installed using `emerge dev-lang/luau`. You may have to unmask the package first before installing it (which can be done by including the `--autounmask=y` option in the `emerge` command).
-
-After installing, you will want to validate the installation was successful by running the test case [here](https://luau.org/getting-started).
+You can use the [Nix](https://nixos.org) package manager to install Luau-NG, or you can build it from source using a modern version of CMake and a C++ compiler such as Clang.
 
 ## Building
 
 On all platforms, you can use CMake to run the following commands to build Luau binaries from source:
 
 ```sh
-mkdir cmake && cd cmake
-cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build . --target Luau.Repl.CLI --config RelWithDebInfo
-cmake --build . --target Luau.Analyze.CLI --config RelWithDebInfo
-```
-
-Alternatively, on Linux and macOS, you can also use `make`:
-
-```sh
-make config=release luau luau-analyze
+cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build
+cmake --install build
 ```
 
 To integrate Luau into your CMake application projects as a library, at the minimum, you'll need to depend on `Luau.Compiler` and `Luau.VM` projects. From there you need to create a new Luau state (using Lua 5.x API such as `lua_newstate`), compile source to bytecode and load it into the VM like this:
@@ -64,19 +47,19 @@ For more details about the use of the host API, you currently need to consult [L
 
 To gain advantage of many performance improvements, it's highly recommended to use the `safeenv` feature, which sandboxes individual scripts' global tables from each other, and protects builtin libraries from monkey-patching. For this to work, you must call `luaL_sandbox` on the global state and `luaL_sandboxthread` for each new script's execution thread.
 
-# Testing
+## Testing
 
 Luau has an internal test suite; in CMake builds, it is split into two targets, `Luau.UnitTest` (for the bytecode compiler and type checker/linter tests) and `Luau.Conformance` (for the VM tests). The unit tests are written in C++, whereas the conformance tests are largely written in Luau (see `tests/conformance`).
 
 Makefile builds combine both into a single target that can be run via `make test`.
 
-# Dependencies
+## Dependencies
 
 Luau uses C++ as its implementation language. The runtime requires C++11, while the compiler and analysis components require C++17. It should build without issues using Microsoft Visual Studio 2017 or later, or gcc-7 or clang-7 or later.
 
 Other than the STL/CRT, Luau library components don't have external dependencies. The test suite depends on the [doctest](https://github.com/onqtam/doctest) testing framework, and the REPL command-line depends on [isocline](https://github.com/daanx/isocline).
 
-# License
+## License
 
 Luau implementation is distributed under the terms of [MIT License](https://github.com/luau-lang/luau/blob/master/LICENSE.txt). It is based on the Lua 5.x implementation, also under the MIT License.
 
