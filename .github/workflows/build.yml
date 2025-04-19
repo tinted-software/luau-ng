@@ -6,12 +6,12 @@ on:
 
 jobs:
   test:
-    runs-on:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: work around ASLR+ASAN compatibility
         run: sudo sysctl -w vm.mmap_rnd_bits=28
       - name: Build docker images
-        run: docker build -t ci -f tools/ci/Dockerfile
+        run: docker build -t ci -f tools/ci/Dockerfile .
       - name: Run tests
         run: docker run --rm -v ${{ github.workspace }}:/src -w /src ci tools/ci/build.sh
