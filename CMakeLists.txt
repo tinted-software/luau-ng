@@ -1,39 +1,36 @@
-# This file is part of the Luau programming language and is licensed under MIT License; see LICENSE.txt for details
-if(EXT_PLATFORM_STRING)
-    include(EXTLuau.cmake)
-    return()
-endif()
+cmake_minimum_required(VERSION 4.0)
 
-cmake_minimum_required(VERSION 3.10)
+project(luau-ng LANGUAGES CXX C VERSION 0.1.0)
 
 option(LUAU_BUILD_CLI "Build CLI" ON)
 option(LUAU_BUILD_TESTS "Build tests" ON)
 option(LUAU_BUILD_WEB "Build Web module" OFF)
-option(LUAU_WERROR "Warnings as errors" OFF)
-option(LUAU_STATIC_CRT "Link with the static CRT (/MT)" OFF)
-option(LUAU_EXTERN_C "Use extern C for all APIs" OFF)
+option(LUAU_ENABLE_LTO "Enable link time optimization" ON)
+option(LUAU_ENABLE_WERROR "Warnings as errors" OFF)
+option(LUAU_ENABLE_CLANG_TIDY "Use clang-tidy" OFF)
 
-cmake_policy(SET CMP0054 NEW)
-cmake_policy(SET CMP0091 NEW)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-if(LUAU_STATIC_CRT)
-    cmake_minimum_required(VERSION 3.15)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+if(LUAU_ENABLE_CLANG_TIDY)
+    set(CMAKE_CXX_CLANG_TIDY "clang-tidy")
 endif()
 
-project(Luau LANGUAGES CXX C)
+if(LUAU_ENABLE_LTO)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+endif()
+
+add_library(Luau.Compiler)
+add_library(Luau.CLI.lib)
+add_library(Luau.Config)
+add_library(Luau.Ast)
+add_library(Luau.Analysis)
+add_library(Luau.EqSat)
+add_library(Luau.CodeGen)
+add_library(Luau.VM)
+add_library(Luau.Require)
+add_library(Luau.RequireNavigator)
 add_library(Luau.Common INTERFACE)
-add_library(Luau.CLI.lib STATIC)
-add_library(Luau.Ast STATIC)
-add_library(Luau.Compiler STATIC)
-add_library(Luau.Config STATIC)
-add_library(Luau.Analysis STATIC)
-add_library(Luau.EqSat STATIC)
-add_library(Luau.CodeGen STATIC)
-add_library(Luau.VM STATIC)
-add_library(Luau.Require STATIC)
-add_library(Luau.RequireNavigator STATIC)
-add_library(isocline STATIC)
+add_library(isocline)
 
 if(LUAU_BUILD_CLI)
     add_executable(Luau.Repl.CLI)
@@ -53,9 +50,9 @@ if(LUAU_BUILD_CLI)
 endif()
 
 if(LUAU_BUILD_TESTS)
+    enable_testing()
     add_executable(Luau.UnitTest)
     add_executable(Luau.Conformance)
-    add_executable(Luau.CLI.Test)
 endif()
 
 if(LUAU_BUILD_WEB)
@@ -65,56 +62,160 @@ endif()
 # Proxy target to make it possible to depend on private VM headers
 add_library(Luau.VM.Internals INTERFACE)
 
+include(GNUInstallDirs)
 include(Sources.cmake)
 
-target_include_directories(Luau.Common INTERFACE Common/include)
+target_include_directories(Luau.Common INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Common/include>
+    $<INSTALL_INTERFACE:include>
+)
+install(TARGETS Luau.Common EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Common/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_compile_features(Luau.CLI.lib PUBLIC cxx_std_17)
-target_include_directories(Luau.CLI.lib PUBLIC CLI/include)
+target_compile_features(Luau.CLI.lib PUBLIC cxx_std_26)
 target_link_libraries(Luau.CLI.lib PRIVATE Luau.Common Luau.Config)
+target_include_directories(Luau.CLI.lib PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CLI/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_features(Luau.Ast PUBLIC cxx_std_26)
+install(TARGETS Luau.CLI.lib EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/CLI/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_compile_features(Luau.Ast PUBLIC cxx_std_17)
-target_include_directories(Luau.Ast PUBLIC Ast/include)
+target_compile_features(Luau.Ast PUBLIC cxx_std_26)
+target_include_directories(Luau.Ast PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Ast/include>
+    $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(Luau.Ast PUBLIC Luau.Common)
+install(TARGETS Luau.Ast EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Ast/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_compile_features(Luau.Compiler PUBLIC cxx_std_17)
-target_include_directories(Luau.Compiler PUBLIC Compiler/include)
+target_compile_features(Luau.Compiler PUBLIC cxx_std_26)
+target_include_directories(Luau.Compiler PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Compiler/include>
+    $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(Luau.Compiler PUBLIC Luau.Ast)
+install(TARGETS Luau.Compiler EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Compiler/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_compile_features(Luau.Config PUBLIC cxx_std_17)
-target_include_directories(Luau.Config PUBLIC Config/include)
+target_compile_features(Luau.Config PUBLIC cxx_std_26)
+target_include_directories(Luau.Config PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Config/include>
+    $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(Luau.Config PUBLIC Luau.Ast)
+install(TARGETS Luau.Config EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Config/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_compile_features(Luau.Analysis PUBLIC cxx_std_17)
-target_include_directories(Luau.Analysis PUBLIC Analysis/include)
+target_compile_features(Luau.Analysis PUBLIC cxx_std_26)
+target_include_directories(Luau.Analysis PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Analysis/include>
+    $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(Luau.Analysis PUBLIC Luau.Ast Luau.EqSat Luau.Config)
 target_link_libraries(Luau.Analysis PRIVATE Luau.Compiler Luau.VM)
+install(TARGETS Luau.Analysis EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Analysis/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_compile_features(Luau.EqSat PUBLIC cxx_std_17)
-target_include_directories(Luau.EqSat PUBLIC EqSat/include)
+target_compile_features(Luau.EqSat PUBLIC cxx_std_26)
+target_include_directories(Luau.EqSat PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/EqSat/include>
+    $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(Luau.EqSat PUBLIC Luau.Common)
+install(TARGETS Luau.EqSat EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/EqSat/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_compile_features(Luau.CodeGen PRIVATE cxx_std_17)
+target_compile_features(Luau.CodeGen PRIVATE cxx_std_26)
 target_include_directories(Luau.CodeGen PUBLIC CodeGen/include)
 target_link_libraries(Luau.CodeGen PRIVATE Luau.VM Luau.VM.Internals) # Code generation needs VM internals
 target_link_libraries(Luau.CodeGen PUBLIC Luau.Common)
+target_include_directories(Luau.CodeGen PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CodeGen/include>
+    $<INSTALL_INTERFACE:include>
+)
+install(TARGETS Luau.CodeGen EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/CodeGen/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
 target_compile_features(Luau.VM PRIVATE cxx_std_11)
-target_include_directories(Luau.VM PUBLIC VM/include)
+target_include_directories(Luau.VM PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/VM/include>
+    $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(Luau.VM PUBLIC Luau.Common)
+install(TARGETS Luau.VM EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/VM/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_compile_features(Luau.Require PUBLIC cxx_std_17)
-target_include_directories(Luau.Require PUBLIC Require/Runtime/include)
+target_compile_features(Luau.Require PUBLIC cxx_std_26)
+target_include_directories(Luau.Require PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Require/Runtime/include>
+    $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(Luau.Require PUBLIC Luau.VM)
 target_link_libraries(Luau.Require PRIVATE Luau.RequireNavigator)
+install(TARGETS Luau.Require EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Require/Runtime/include
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_compile_features(Luau.RequireNavigator PUBLIC cxx_std_17)
-target_include_directories(Luau.RequireNavigator PUBLIC Require/Navigator/include)
+target_compile_features(Luau.RequireNavigator PUBLIC cxx_std_26)
+target_include_directories(Luau.RequireNavigator PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Require/Navigator/include>
+    $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(Luau.RequireNavigator PUBLIC Luau.Config)
+install(TARGETS Luau.RequireNavigator EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Require/Navigator/include
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_include_directories(isocline PUBLIC extern/isocline/include)
+target_include_directories(isocline PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/extern/isocline/include>
+    $<INSTALL_INTERFACE:include>
+)
+install(TARGETS isocline EXPORT LuauTargets)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/extern/isocline/include
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
 
-target_include_directories(Luau.VM.Internals INTERFACE VM/src)
+target_include_directories(Luau.VM.Internals INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/VM/src>
+    # no INSTALL_INTERFACE: the `Internals` target really only exists at compile-time
+)
+install(TARGETS Luau.VM.Internals EXPORT LuauTargets)
+
 
 set(LUAU_OPTIONS)
 
@@ -167,15 +268,6 @@ target_compile_options(Luau.CLI.lib PRIVATE ${LUAU_OPTIONS})
 target_compile_options(Luau.CodeGen PRIVATE ${LUAU_OPTIONS})
 target_compile_options(Luau.VM PRIVATE ${LUAU_OPTIONS})
 target_compile_options(isocline PRIVATE ${LUAU_OPTIONS} ${ISOCLINE_OPTIONS})
-
-if(LUAU_EXTERN_C)
-    # enable extern "C" for VM (lua.h, lualib.h) and Compiler (luacode.h) to make Luau friendlier to use from non-C++ languages
-    # note that we enable LUA_USE_LONGJMP=1 as well; otherwise functions like luaL_error will throw C++ exceptions, which can't be done from extern "C" functions
-    target_compile_definitions(Luau.VM PUBLIC LUA_USE_LONGJMP=1)
-    target_compile_definitions(Luau.VM PUBLIC LUA_API=extern\"C\")
-    target_compile_definitions(Luau.Compiler PUBLIC LUACODE_API=extern\"C\")
-    target_compile_definitions(Luau.CodeGen PUBLIC LUACODEGEN_API=extern\"C\")
-endif()
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND MSVC_VERSION GREATER_EQUAL 1924)
     # disable partial redundancy elimination which regresses interpreter codegen substantially in VS2022:
@@ -239,7 +331,7 @@ if(LUAU_BUILD_CLI)
 
     target_link_libraries(Luau.Ast.CLI PRIVATE Luau.Ast Luau.Analysis Luau.CLI.lib)
 
-    target_compile_features(Luau.Reduce.CLI PRIVATE cxx_std_17)
+    target_compile_features(Luau.Reduce.CLI PRIVATE cxx_std_26)
     target_include_directories(Luau.Reduce.CLI PUBLIC Reduce/include)
     target_link_libraries(Luau.Reduce.CLI PRIVATE Luau.Common Luau.Ast Luau.Analysis Luau.CLI.lib)
 
@@ -249,28 +341,22 @@ if(LUAU_BUILD_CLI)
 endif()
 
 if(LUAU_BUILD_TESTS)
+    find_package(doctest REQUIRED)
+    get_target_property(DOCTEST_INCLUDE_DIR doctest::doctest INTERFACE_INCLUDE_DIRECTORIES)
+
     target_compile_options(Luau.UnitTest PRIVATE ${LUAU_OPTIONS})
     target_compile_definitions(Luau.UnitTest PRIVATE DOCTEST_CONFIG_DOUBLE_STRINGIFY)
-    target_include_directories(Luau.UnitTest PRIVATE extern)
-    target_link_libraries(Luau.UnitTest PRIVATE Luau.Analysis Luau.Compiler Luau.CodeGen)
+    target_link_libraries(Luau.UnitTest PRIVATE Luau.Analysis Luau.Compiler Luau.CodeGen doctest::doctest)
+    target_include_directories(Luau.UnitTest PRIVATE ${DOCTEST_INCLUDE_DIR}/doctest)
 
     target_compile_options(Luau.Conformance PRIVATE ${LUAU_OPTIONS})
     target_compile_definitions(Luau.Conformance PRIVATE DOCTEST_CONFIG_DOUBLE_STRINGIFY)
-    target_include_directories(Luau.Conformance PRIVATE extern)
-    target_link_libraries(Luau.Conformance PRIVATE Luau.Analysis Luau.Compiler Luau.CodeGen Luau.VM)
-    if(CMAKE_SYSTEM_NAME MATCHES "Android|iOS")
-        set(LUAU_CONFORMANCE_SOURCE_DIR "Client/Luau/tests/conformance")
-    else ()
-        file(REAL_PATH "tests/conformance" LUAU_CONFORMANCE_SOURCE_DIR)
-    endif ()
-    target_compile_definitions(Luau.Conformance PRIVATE LUAU_CONFORMANCE_SOURCE_DIR="${LUAU_CONFORMANCE_SOURCE_DIR}")
+    target_link_libraries(Luau.Conformance PRIVATE Luau.Analysis Luau.Compiler Luau.CodeGen Luau.VM doctest::doctest)
+    target_include_directories(Luau.Conformance PRIVATE ${DOCTEST_INCLUDE_DIR}/doctest)
+    file(REAL_PATH "tests/conformance" LUAU_CONFORMANCE_SOURCE_DIR)
 
-    target_compile_options(Luau.CLI.Test PRIVATE ${LUAU_OPTIONS})
-    target_include_directories(Luau.CLI.Test PRIVATE extern CLI)
-    target_link_libraries(Luau.CLI.Test PRIVATE Luau.Compiler Luau.Config Luau.CodeGen Luau.VM Luau.Require Luau.CLI.lib isocline)
-    target_link_libraries(Luau.CLI.Test PRIVATE osthreads)
-
-    add_subdirectory(fuzz)
+    add_test(NAME luau-unittests COMMAND Luau.UnitTest)
+    add_test(NAME luau-conformance COMMAND Luau.Conformance)
 endif()
 
 if(LUAU_BUILD_WEB)
@@ -302,3 +388,23 @@ foreach(LIB Luau.Ast Luau.Compiler Luau.Config Luau.Analysis Luau.EqSat Luau.Cod
         endif()
     endif()
 endforeach()
+
+cmake_path(APPEND libdir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_LIBDIR}")
+cmake_path(APPEND includedir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_INCLUDEDIR}")
+
+file(RELATIVE_PATH in_file ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/tools/luau.pc.in)
+string(REPLACE ".in" "" pc_file ${in_file})
+configure_file(${in_file} ${CMAKE_CURRENT_BINARY_DIR}/${pc_file} @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${pc_file} DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+
+if(LUAU_BUILD_CLI)
+    install(
+        TARGETS
+        Luau.Repl.CLI
+        Luau.Reduce.CLI
+        Luau.Analyze.CLI
+        Luau.Ast.CLI
+        Luau.Compile.CLI
+        Luau.Bytecode.CLI
+    )
+endif()
