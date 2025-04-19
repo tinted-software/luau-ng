@@ -53,13 +53,8 @@
 #define LUALIB_API LUA_API
 
 // Can be used to reconfigure visibility for internal APIs
-#if defined(__GNUC__)
-#define LUAI_FUNC __attribute__((visibility("hidden"))) extern
+#define LUAI_FUNC extern "C"
 #define LUAI_DATA LUAI_FUNC
-#else
-#define LUAI_FUNC extern
-#define LUAI_DATA extern
-#endif
 
 // Can be used to reconfigure internal error handling to use longjmp instead of C++ EH
 #ifndef LUA_USE_LONGJMP

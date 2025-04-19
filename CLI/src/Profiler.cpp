@@ -112,6 +112,8 @@ void profilerStop()
     gProfiler.thread.join();
 }
 
+extern "C" const char* luaC_statename(int state);
+
 void profilerDump(const char* path)
 {
     FILE* f = fopen(path, "wb");
@@ -149,8 +151,6 @@ void profilerDump(const char* path)
 
         for (size_t i = 0; i < std::size(gProfiler.gc); ++i)
         {
-            extern const char* luaC_statename(int state);
-
             uint64_t p = gProfiler.gc[i];
 
             if (p)
