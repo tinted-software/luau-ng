@@ -28,11 +28,11 @@ extern bool codegen;
 extern int optimizationLevel;
 
 // internal functions, declared in lgc.h - not exposed via lua.h
-void luaC_fullgc(lua_State* L);
-void luaC_validate(lua_State* L);
+extern "C" void luaC_fullgc(lua_State* L);
+extern "C" void luaC_validate(lua_State* L);
 
 // internal functions, declared in lvm.h - not exposed via lua.h
-void luau_callhook(lua_State* L, lua_Hook hook, void* userdata);
+extern "C" void luau_callhook(lua_State* L, lua_Hook hook, void* userdata);
 
 LUAU_FASTFLAG(DebugLuauAbortingChecks)
 LUAU_FASTINT(CodegenHeuristicsInstructionLimit)
@@ -598,9 +598,10 @@ void setupUserdataHelpers(lua_State* L)
     lua_pop(L, 1);
 }
 
+extern "C" int luaG_isnative(lua_State * L, int level);
+
 static void setupNativeHelpers(lua_State* L)
 {
-    extern int luaG_isnative(lua_State * L, int level);
 
     lua_pushcclosurek(
         L,
@@ -1657,10 +1658,10 @@ TEST_CASE("NDebugGetUpValue")
     );
 }
 
+extern "C" unsigned int luaS_hash(const char* str, size_t len); // internal function, declared in lstring.h - not exposed via lua.h
+
 TEST_CASE("SameHash")
 {
-    extern unsigned int luaS_hash(const char* str, size_t len); // internal function, declared in lstring.h - not exposed via lua.h
-
     // To keep VM and compiler separate, we duplicate the hash function definition
     // This test validates that the hash function in question returns the same results on basic inputs
     // If this is violated, some code may regress in performance due to hash slot misprediction in inline caches
@@ -2519,16 +2520,17 @@ TEST_CASE("StringConversion")
     runConformance("strconv.luau");
 }
 
+// internal function, declared in lgc.h - not exposed via lua.h
+extern "C" void luaC_dump(lua_State * L, void* file, const char* (*categoryName)(lua_State* L, uint8_t memcat));
+extern "C" void luaC_enumheap(
+    lua_State * L,
+    void* context,
+    void (*node)(void* context, void* ptr, uint8_t tt, uint8_t memcat, size_t size, const char* name),
+    void (*edge)(void* context, void* from, void* to, const char* name)
+);
+
 TEST_CASE("GCDump")
 {
-    // internal function, declared in lgc.h - not exposed via lua.h
-    extern void luaC_dump(lua_State * L, void* file, const char* (*categoryName)(lua_State* L, uint8_t memcat));
-    extern void luaC_enumheap(
-        lua_State * L,
-        void* context,
-        void (*node)(void* context, void* ptr, uint8_t tt, uint8_t memcat, size_t size, const char* name),
-        void (*edge)(void* context, void* from, void* to, const char* name)
-    );
 
     StateRef globalState(luaL_newstate(), lua_close);
     lua_State* L = globalState.get();

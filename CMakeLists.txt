@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 4.0)
 
+set(CMAKE_DISABLE_IN_SOURCE_BUILDS ON)
+set(CMAKE_DISABLE_SOURCE_CHANGES ON)
+
 project(luau-ng LANGUAGES CXX C VERSION 0.1.0)
 
 option(LUAU_BUILD_CLI "Build CLI" ON)
@@ -321,11 +324,7 @@ if(LUAU_BUILD_CLI)
     target_link_libraries(Luau.Repl.CLI PRIVATE Luau.Compiler Luau.Config Luau.CodeGen Luau.VM Luau.Require Luau.CLI.lib isocline)
 
     target_link_libraries(Luau.Repl.CLI PRIVATE osthreads)
-    target_link_libraries(Luau.Reduce.CLI PRIVATE osthreads)
     target_link_libraries(Luau.Analyze.CLI PRIVATE osthreads)
-    target_link_libraries(Luau.Ast.CLI PRIVATE osthreads)
-    target_link_libraries(Luau.Compile.CLI PRIVATE osthreads)
-    target_link_libraries(Luau.Bytecode.CLI PRIVATE osthreads)
 
     target_link_libraries(Luau.Analyze.CLI PRIVATE Luau.Analysis Luau.CLI.lib Luau.RequireNavigator)
 
