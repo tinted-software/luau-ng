@@ -1,0 +1,24 @@
+[package]
+name = "tinted_luau_sys"
+version = "0.1.2"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/tinted-software/luau-rs"
+description = "Luau bindings for Rust"
+build = "rust/build.rs"
+
+[lib]
+name = "luau_sys"
+path = "rust/lib.rs"
+
+[build-dependencies]
+bindgen = "0.72.0"
+pkg-config = "0.3.32"
+
+[[example]]
+name = "hello"
+path = "rust/examples/hello.rs"
+
+[features]
+default = ["std"]
+std = []

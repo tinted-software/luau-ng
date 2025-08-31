@@ -6,7 +6,9 @@ steps:
   - name: build
     image: docker.io/theoparis/chimera
     commands:
-      - apk add cmake ninja clang doctest pkgconf linux-headers
-      - cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+      - apk add --no-interactive cmake ninja clang doctest pkgconf linux-headers rust cargo
+      - cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DBUILD_SHARED_LIBS=ON
       - cmake --build build
       - ctest --test-dir build --output-on-failure
+      - cmake --install build
+      - PKG_CONFIG_PATH=/usr/local/lib/pkgconfig cargo build --all-targets

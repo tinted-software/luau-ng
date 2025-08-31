@@ -18,3 +18,5 @@
 __pycache__
 .cache
 .clangd
+target/
+.DS_Store
