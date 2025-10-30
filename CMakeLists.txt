@@ -126,6 +126,7 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Config/include/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.h"
 )
+target_link_libraries(Luau.Config PRIVATE Luau.Compiler Luau.VM)
 
 target_compile_features(Luau.Analysis PUBLIC cxx_std_26)
 target_include_directories(Luau.Analysis PUBLIC

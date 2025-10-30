@@ -54,6 +54,8 @@ LUAU_FASTFLAGVARIABLE(LuauNoMoreComparisonTypeFunctions)
 LUAU_FASTFLAG(LuauNoOrderingTypeFunctions)
 LUAU_FASTFLAGVARIABLE(LuauDontReferenceScopePtrFromHashTable)
 LUAU_FASTFLAG(LuauBuiltinTypeFunctionsArentGlobal)
+LUAU_FASTFLAGVARIABLE(LuauMetatableAvoidSingletonUnion)
+LUAU_FASTFLAGVARIABLE(LuauAddRefinementToAssertions)
 
 namespace Luau
 {
@@ -710,7 +712,7 @@ void ConstraintGenerator::applyRefinements(const ScopePtr& scope, Location locat
             discriminants.clear();
             return resultType;
         }
-        
+
     };
 
     for (auto& [def, partition] : refinements)
@@ -1561,7 +1563,7 @@ ControlFlow ConstraintGenerator::visit(const ScopePtr& scope, AstStatFunction* f
         sig.bodyScope->lvalueTypes[def] = sig.signature;
         updateRValueRefinements(sig.bodyScope, def, sig.signature);
     }
-    else if (AstExprIndexName* indexName = function->name->as<AstExprIndexName>())
+    else if (function->name->is<AstExprIndexName>())
     {
         updateRValueRefinements(sig.bodyScope, def, sig.signature);
     }
@@ -1671,7 +1673,7 @@ ControlFlow ConstraintGenerator::visit(const ScopePtr& scope, AstStatFunction* f
     {
         visitLValue(scope, indexName, generalizedType);
     }
-    else if (AstExprError* err = function->name->as<AstExprError>())
+    else if (function->name->is<AstExprError>())
     {
         generalizedType = builtinTypes->errorType;
     }
@@ -2358,7 +2360,7 @@ InferencePack ConstraintGenerator::checkPack(
 
     if (AstExprCall* call = expr->as<AstExprCall>())
         result = checkPack(scope, call);
-    else if (AstExprVarargs* varargs = expr->as<AstExprVarargs>())
+    else if (expr->is<AstExprVarargs>())
     {
         if (scope->varargPack)
             result = InferencePack{*scope->varargPack};
@@ -2471,9 +2473,19 @@ InferencePack ConstraintGenerator::checkPack(const ScopePtr& scope, AstExprCall*
             {
                 expectedType = expectedTypesForCall[i];
             }
-            auto [ty, refinement] = check(scope, arg, expectedType, /*forceSingleton*/ false, /*generalize*/ false);
-            args.push_back(ty);
-            argumentRefinements.push_back(refinement);
+            if (FFlag::LuauAddRefinementToAssertions && i == 0 && matchAssert(*call))
+            {
+                InConditionalContext flipper{&typeContext};
+                auto [ty, refinement] = check(scope, arg, expectedType, /*forceSingleton*/ false, /*generalize*/ false);
+                args.push_back(ty);
+                argumentRefinements.push_back(refinement);
+            }
+            else
+            {
+                auto [ty, refinement] = check(scope, arg, expectedType, /*forceSingleton*/ false, /*generalize*/ false);
+                args.push_back(ty);
+                argumentRefinements.push_back(refinement);
+            }
         }
         else
         {
@@ -2535,13 +2547,26 @@ InferencePack ConstraintGenerator::checkPack(const ScopePtr& scope, AstExprCall*
 
         if (isTableUnion(target))
         {
-            const UnionType* targetUnion = get<UnionType>(target);
-            std::vector<TypeId> newParts;
+            if (FFlag::LuauMetatableAvoidSingletonUnion)
+            {
+                const UnionType* targetUnion = get<UnionType>(target);
+                UnionBuilder ub{arena, builtinTypes};
 
-            for (TypeId ty : targetUnion)
-                newParts.push_back(arena->addType(MetatableType{ty, mt}));
+                for (TypeId ty : targetUnion)
+                    ub.add(arena->addType(MetatableType{ty, mt}));
 
-            resultTy = arena->addType(UnionType{std::move(newParts)});
+                resultTy = ub.build();
+            }
+            else
+            {
+                const UnionType* targetUnion = get<UnionType>(target);
+                std::vector<TypeId> newParts;
+
+                for (TypeId ty : targetUnion)
+                    newParts.push_back(arena->addType(MetatableType{ty, mt}));
+
+                resultTy = arena->addType(UnionType{std::move(newParts)});
+            }
         }
         else
             resultTy = arena->addType(MetatableType{target, mt});
