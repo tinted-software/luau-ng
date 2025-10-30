@@ -346,7 +346,7 @@ if(LUAU_BUILD_TESTS)
 
     target_compile_options(Luau.UnitTest PRIVATE ${LUAU_OPTIONS})
     target_compile_definitions(Luau.UnitTest PRIVATE DOCTEST_CONFIG_DOUBLE_STRINGIFY)
-    target_link_libraries(Luau.UnitTest PRIVATE Luau.Analysis Luau.Compiler Luau.CodeGen doctest::doctest)
+    target_link_libraries(Luau.UnitTest PRIVATE Luau.Analysis Luau.Compiler Luau.CodeGen Luau.VM doctest::doctest)
     target_include_directories(Luau.UnitTest PRIVATE ${DOCTEST_INCLUDE_DIR}/doctest)
 
     target_compile_options(Luau.Conformance PRIVATE ${LUAU_OPTIONS})
