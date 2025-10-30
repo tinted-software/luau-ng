@@ -20,3 +20,5 @@ __pycache__
 .clangd
 target/
 .DS_Store
+/result
+/result-*

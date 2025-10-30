@@ -8,7 +8,7 @@ project(luau-ng LANGUAGES CXX C VERSION 0.1.0)
 option(LUAU_BUILD_CLI "Build CLI" ON)
 option(LUAU_BUILD_TESTS "Build tests" ON)
 option(LUAU_BUILD_WEB "Build Web module" OFF)
-option(LUAU_ENABLE_LTO "Enable link time optimization" ON)
+option(LUAU_ENABLE_LTO "Enable link time optimization" OFF)
 option(LUAU_ENABLE_WERROR "Warnings as errors" OFF)
 option(LUAU_ENABLE_CLANG_TIDY "Use clang-tidy" OFF)
 
