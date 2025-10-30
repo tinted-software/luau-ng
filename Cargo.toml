@@ -12,7 +12,8 @@ name = "luau_sys"
 path = "rust/lib.rs"
 
 [build-dependencies]
-bindgen = "0.72.0"
+# TODO: depends on a relase of bindgen, see https://github.com/rust-lang/rust-bindgen/commit/2426dd68cd12e0ac022bca18efb9c7d0acd27e12
+bindgen = { git = "https://github.com/rust-lang/rust-bindgen/" }
 pkg-config = "0.3.32"
 
 [[example]]

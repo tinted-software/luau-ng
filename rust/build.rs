@@ -22,7 +22,7 @@ fn main() {
 		.clang_arg("-xc++")
 		.use_core()
 		.rust_edition(bindgen::RustEdition::Edition2024)
-		.rust_target(RustTarget::stable(89, 0).ok().unwrap())
+		.rust_target(RustTarget::stable(90, 0).ok().unwrap())
 		.layout_tests(false)
 		.default_enum_style(EnumVariation::NewType {
 			is_bitfield: false,
