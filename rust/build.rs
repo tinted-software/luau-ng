@@ -17,7 +17,6 @@ fn main() {
 	println!("cargo:rustc-link-lib=Luau.Config");
 	println!("cargo:rustc-link-lib=Luau.EqSat");
 	println!("cargo:rustc-link-lib=Luau.Require");
-	println!("cargo:rustc-link-lib=Luau.RequireNavigator");
 	println!("cargo:rustc-link-lib=Luau.VM");
 
 	let cxx_stdlib = env::var("CXXSTDLIB").unwrap_or("c++".to_string());

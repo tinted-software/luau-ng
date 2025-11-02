@@ -31,9 +31,8 @@ add_library(Luau.EqSat)
 add_library(Luau.CodeGen)
 add_library(Luau.VM)
 add_library(Luau.Require)
-add_library(Luau.RequireNavigator)
-add_library(Luau.Common INTERFACE)
 add_library(isocline)
+add_library(Luau.Common INTERFACE)
 
 if(LUAU_BUILD_CLI)
     add_executable(Luau.Repl.CLI)
@@ -181,25 +180,12 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/VM/include/
 
 target_compile_features(Luau.Require PUBLIC cxx_std_26)
 target_include_directories(Luau.Require PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Require/Runtime/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Require/include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(Luau.Require PUBLIC Luau.VM)
-target_link_libraries(Luau.Require PRIVATE Luau.RequireNavigator)
+target_link_libraries(Luau.Require PUBLIC Luau.VM Luau.Config)
 install(TARGETS Luau.Require EXPORT LuauTargets)
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Require/Runtime/include
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.h"
-)
-
-target_compile_features(Luau.RequireNavigator PUBLIC cxx_std_26)
-target_include_directories(Luau.RequireNavigator PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Require/Navigator/include>
-    $<INSTALL_INTERFACE:include>
-)
-target_link_libraries(Luau.RequireNavigator PUBLIC Luau.Config)
-install(TARGETS Luau.RequireNavigator EXPORT LuauTargets)
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Require/Navigator/include
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Require/include
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.h"
 )
@@ -327,7 +313,7 @@ if(LUAU_BUILD_CLI)
     target_link_libraries(Luau.Repl.CLI PRIVATE osthreads)
     target_link_libraries(Luau.Analyze.CLI PRIVATE osthreads)
 
-    target_link_libraries(Luau.Analyze.CLI PRIVATE Luau.Analysis Luau.CLI.lib Luau.RequireNavigator)
+    target_link_libraries(Luau.Analyze.CLI PRIVATE Luau.Analysis Luau.CLI.lib Luau.Require)
 
     target_link_libraries(Luau.Ast.CLI PRIVATE Luau.Ast Luau.Analysis Luau.CLI.lib)
 
@@ -361,10 +347,10 @@ endif()
 
 if(LUAU_BUILD_WEB)
     target_compile_options(Luau.Web PRIVATE ${LUAU_OPTIONS})
-    target_link_libraries(Luau.Web PRIVATE Luau.Compiler Luau.VM)
+    target_link_libraries(Luau.Web PRIVATE Luau.Compiler Luau.VM Luau.Analysis)
 
     # declare exported functions to emscripten
-    target_link_options(Luau.Web PRIVATE -sEXPORTED_FUNCTIONS=['_executeScript'] -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap'])
+    target_link_options(Luau.Web PRIVATE -sEXPORTED_FUNCTIONS=["_executeScript","_checkScript"] -sEXPORTED_RUNTIME_METHODS=["ccall","cwrap"])
 
     # add -fexceptions for emscripten to allow exceptions to be caught in C++
     target_link_options(Luau.Web PRIVATE -fexceptions)
