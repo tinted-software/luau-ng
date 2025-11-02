@@ -47,7 +47,7 @@
 
 // Can be used to reconfigure visibility/exports for public APIs
 #ifndef LUA_API
-#define LUA_API extern
+#define LUA_API extern "C"
 #endif
 
 #define LUALIB_API LUA_API

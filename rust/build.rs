@@ -11,11 +11,17 @@ fn main() {
 	}
 	println!("cargo:rustc-link-search=luau/build");
 	println!("cargo:rustc-link-lib=Luau.Analysis");
-	println!("cargo:rustc-link-lib=Luau.Ast");
-	println!("cargo:rustc-link-lib=Luau.Config");
-	println!("cargo:rustc-link-lib=Luau.Compiler");
+	println!("cargo:rustc-link-lib=Luau.CLI.lib");
 	println!("cargo:rustc-link-lib=Luau.CodeGen");
+	println!("cargo:rustc-link-lib=Luau.Compiler");
+	println!("cargo:rustc-link-lib=Luau.Config");
+	println!("cargo:rustc-link-lib=Luau.EqSat");
+	println!("cargo:rustc-link-lib=Luau.Require");
+	println!("cargo:rustc-link-lib=Luau.RequireNavigator");
 	println!("cargo:rustc-link-lib=Luau.VM");
+
+	let cxx_stdlib = env::var("CXXSTDLIB").unwrap_or("c++".to_string());
+	println!("cargo:rustc-link-lib={cxx_stdlib}");
 
 	let bindings = bindgen::Builder::default()
 		.header("rust/wrapper.h")
