@@ -32,7 +32,7 @@ add_library(Luau.CodeGen)
 add_library(Luau.VM)
 add_library(Luau.Require)
 add_library(isocline)
-add_library(Luau.Common INTERFACE)
+add_library(Luau.Common)
 
 if(LUAU_BUILD_CLI)
     add_executable(Luau.Repl.CLI)
@@ -67,7 +67,7 @@ add_library(Luau.VM.Internals INTERFACE)
 include(GNUInstallDirs)
 include(Sources.cmake)
 
-target_include_directories(Luau.Common INTERFACE
+target_include_directories(Luau.Common PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Common/include>
     $<INSTALL_INTERFACE:include>
 )
