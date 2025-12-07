@@ -12,7 +12,7 @@
 #include "lstate.h"
 #include "lgc.h"
 
-LUAU_FASTFLAG(LuauCodegenDirectCompare2)
+LUAU_FASTFLAG(LuauCodegenBlockSafeEnv)
 
 namespace Luau
 {
@@ -913,7 +913,6 @@ void IrLoweringA64::lowerInst(IrInst& inst, uint32_t index, const IrBlock& next)
     }
     case IrCmd::CMP_TAG:
     {
-        CODEGEN_ASSERT(FFlag::LuauCodegenDirectCompare2);
         inst.regA64 = regs.allocReuse(KindA64::w, index, {inst.a, inst.b});
 
         IrCondition cond = conditionOp(inst.c);
@@ -970,7 +969,6 @@ void IrLoweringA64::lowerInst(IrInst& inst, uint32_t index, const IrBlock& next)
     }
     case IrCmd::CMP_SPLIT_TVALUE:
     {
-        CODEGEN_ASSERT(FFlag::LuauCodegenDirectCompare2);
         inst.regA64 = regs.allocReuse(KindA64::w, index, {inst.a, inst.b});
 
         // Second operand of this instruction must be a constant
@@ -1079,68 +1077,49 @@ void IrLoweringA64::lowerInst(IrInst& inst, uint32_t index, const IrBlock& next)
     case IrCmd::JUMP_EQ_TAG:
     {
         RegisterA64 zr = noreg;
+        RegisterA64 aReg = noreg;
+        RegisterA64 bReg = noreg;
 
-        if (FFlag::LuauCodegenDirectCompare2)
+        if (inst.a.kind == IrOpKind::Inst)
         {
-            RegisterA64 aReg = noreg;
-            RegisterA64 bReg = noreg;
-
-            if (inst.a.kind == IrOpKind::Inst)
-            {
-                aReg = regOp(inst.a);
-            }
-            else if (inst.a.kind == IrOpKind::VmReg)
-            {
-                aReg = regs.allocTemp(KindA64::w);
-                AddressA64 addr = tempAddr(inst.a, offsetof(TValue, tt));
-                build.ldr(aReg, addr);
-            }
-            else
-            {
-                CODEGEN_ASSERT(inst.a.kind == IrOpKind::Constant);
-            }
-
-            if (inst.b.kind == IrOpKind::Inst)
-            {
-                bReg = regOp(inst.b);
-            }
-            else if (inst.b.kind == IrOpKind::VmReg)
-            {
-                bReg = regs.allocTemp(KindA64::w);
-                AddressA64 addr = tempAddr(inst.b, offsetof(TValue, tt));
-                build.ldr(bReg, addr);
-            }
-            else
-            {
-                CODEGEN_ASSERT(inst.b.kind == IrOpKind::Constant);
-            }
-
-            if (inst.a.kind == IrOpKind::Constant && tagOp(inst.a) == 0)
-                zr = bReg;
-            else if (inst.b.kind == IrOpKind::Constant && tagOp(inst.b) == 0)
-                zr = aReg;
-            else if (inst.b.kind == IrOpKind::Constant)
-                build.cmp(aReg, tagOp(inst.b));
-            else if (inst.a.kind == IrOpKind::Constant)
-                build.cmp(bReg, tagOp(inst.a));
-            else
-                build.cmp(aReg, bReg);
+            aReg = regOp(inst.a);
+        }
+        else if (inst.a.kind == IrOpKind::VmReg)
+        {
+            aReg = regs.allocTemp(KindA64::w);
+            AddressA64 addr = tempAddr(inst.a, offsetof(TValue, tt));
+            build.ldr(aReg, addr);
         }
         else
         {
-            if (inst.a.kind == IrOpKind::Constant && tagOp(inst.a) == 0)
-                zr = regOp(inst.b);
-            else if (inst.b.kind == IrOpKind::Constant && tagOp(inst.b) == 0)
-                zr = regOp(inst.a);
-            else if (inst.a.kind == IrOpKind::Inst && inst.b.kind == IrOpKind::Constant)
-                build.cmp(regOp(inst.a), tagOp(inst.b));
-            else if (inst.a.kind == IrOpKind::Inst && inst.b.kind == IrOpKind::Inst)
-                build.cmp(regOp(inst.a), regOp(inst.b));
-            else if (inst.a.kind == IrOpKind::Constant && inst.b.kind == IrOpKind::Inst)
-                build.cmp(regOp(inst.b), tagOp(inst.a));
-            else
-                CODEGEN_ASSERT(!"Unsupported instruction form");
+            CODEGEN_ASSERT(inst.a.kind == IrOpKind::Constant);
         }
+
+        if (inst.b.kind == IrOpKind::Inst)
+        {
+            bReg = regOp(inst.b);
+        }
+        else if (inst.b.kind == IrOpKind::VmReg)
+        {
+            bReg = regs.allocTemp(KindA64::w);
+            AddressA64 addr = tempAddr(inst.b, offsetof(TValue, tt));
+            build.ldr(bReg, addr);
+        }
+        else
+        {
+            CODEGEN_ASSERT(inst.b.kind == IrOpKind::Constant);
+        }
+
+        if (inst.a.kind == IrOpKind::Constant && tagOp(inst.a) == 0)
+            zr = bReg;
+        else if (inst.b.kind == IrOpKind::Constant && tagOp(inst.b) == 0)
+            zr = aReg;
+        else if (inst.b.kind == IrOpKind::Constant)
+            build.cmp(aReg, tagOp(inst.b));
+        else if (inst.a.kind == IrOpKind::Constant)
+            build.cmp(bReg, tagOp(inst.a));
+        else
+            build.cmp(aReg, bReg);
 
         if (isFallthroughBlock(blockOp(inst.d), next))
         {
@@ -1809,13 +1788,20 @@ void IrLoweringA64::lowerInst(IrInst& inst, uint32_t index, const IrBlock& next)
     }
     case IrCmd::CHECK_SAFE_ENV:
     {
-        Label fresh; // used when guard aborts execution or jumps to a VM exit
-        RegisterA64 temp = regs.allocTemp(KindA64::x);
-        RegisterA64 tempw = castReg(KindA64::w, temp);
-        build.ldr(temp, mem(rClosure, offsetof(Closure, env)));
-        build.ldrb(tempw, mem(temp, offsetof(LuaTable, safeenv)));
-        build.cbz(tempw, getTargetLabel(inst.a, fresh));
-        finalizeTargetLabel(inst.a, fresh);
+        if (FFlag::LuauCodegenBlockSafeEnv)
+        {
+            checkSafeEnv(inst.a, next);
+        }
+        else
+        {
+            Label fresh; // used when guard aborts execution or jumps to a VM exit
+            RegisterA64 temp = regs.allocTemp(KindA64::x);
+            RegisterA64 tempw = castReg(KindA64::w, temp);
+            build.ldr(temp, mem(rClosure, offsetof(Closure, env)));
+            build.ldrb(tempw, mem(temp, offsetof(LuaTable, safeenv)));
+            build.cbz(tempw, getTargetLabel(inst.a, fresh));
+            finalizeTargetLabel(inst.a, fresh);
+        }
         break;
     }
     case IrCmd::CHECK_ARRAY_SIZE:
@@ -2829,6 +2815,17 @@ void IrLoweringA64::finalizeTargetLabel(IrOp op, Label& fresh)
         exitHandlerMap[vmExitOp(op)] = uint32_t(exitHandlers.size());
         exitHandlers.push_back({fresh, vmExitOp(op)});
     }
+}
+
+void IrLoweringA64::checkSafeEnv(IrOp target, const IrBlock& next)
+{
+    Label fresh; // used when guard aborts execution or jumps to a VM exit
+    RegisterA64 temp = regs.allocTemp(KindA64::x);
+    RegisterA64 tempw = castReg(KindA64::w, temp);
+    build.ldr(temp, mem(rClosure, offsetof(Closure, env)));
+    build.ldrb(tempw, mem(temp, offsetof(LuaTable, safeenv)));
+    build.cbz(tempw, getTargetLabel(target, fresh));
+    finalizeTargetLabel(target, fresh);
 }
 
 RegisterA64 IrLoweringA64::tempDouble(IrOp op)

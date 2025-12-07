@@ -13,10 +13,6 @@
 
 #include <optional>
 
-LUAU_FASTFLAG(LuauEmplaceNotPushBack)
-
-LUAU_FASTFLAG(LuauExplicitSkipBoundTypes)
-
 namespace Luau
 {
 struct InstanceCollector2 : TypeOnceVisitor
@@ -27,7 +23,7 @@ struct InstanceCollector2 : TypeOnceVisitor
     DenseHashSet<TypeId> instanceArguments{nullptr};
 
     InstanceCollector2()
-        : TypeOnceVisitor("InstanceCollector2", FFlag::LuauExplicitSkipBoundTypes)
+        : TypeOnceVisitor("InstanceCollector2", /* skipBoundTypes */ true)
     {
     }
 
@@ -171,10 +167,7 @@ TypeFunctionReductionGuessResult TypeFunctionReductionGuesser::guessTypeFunction
         if (get<TypeFunctionInstanceType>(guess))
             continue;
 
-        if (FFlag::LuauEmplaceNotPushBack)
-            results.emplace_back(local->name.value, guess);
-        else
-            results.push_back({local->name.value, guess});
+        results.emplace_back(local->name.value, guess);
     }
 
     // Submit a guess for return types

@@ -17,6 +17,8 @@ LUAU_DYNAMIC_FASTINT(LuauTypeFamilyApplicationCartesianProductLimit)
 LUAU_FASTFLAG(DebugLuauAssertOnForcedConstraint)
 LUAU_FASTFLAG(LuauNoMoreComparisonTypeFunctions)
 LUAU_FASTFLAG(LuauBuiltinTypeFunctionsArentGlobal)
+LUAU_FASTFLAG(LuauGetmetatableError)
+LUAU_FASTFLAG(LuauInstantiationUsesGenericPolarity)
 
 struct TypeFunctionFixture : Fixture
 {
@@ -1762,7 +1764,6 @@ struct TFFixture
 
     InternalErrorReporter ice;
     UnifierSharedState unifierState{&ice};
-    SimplifierPtr simplifier = EqSatSimplification::newSimplifier(arena, getBuiltins());
     Normalizer normalizer{arena, getBuiltins(), NotNull{&unifierState}, SolverMode::New};
     TypeCheckLimits limits;
     TypeFunctionRuntime runtime{NotNull{&ice}, NotNull{&limits}};
@@ -1773,7 +1774,6 @@ struct TFFixture
         arena,
         getBuiltins(),
         NotNull{globalScope.get()},
-        NotNull{simplifier.get()},
         NotNull{&normalizer},
         NotNull{&runtime},
         NotNull{&ice},
@@ -1875,6 +1875,24 @@ TEST_CASE_FIXTURE(TFFixture, "reduce_degenerate_refinement")
     emplaceType<BoundType>(asMutable(root), refinement);
     reduceTypeFunctions(refinement, Location{}, tfc, true);
     CHECK_EQ("unknown", toString(refinement));
+}
+
+TEST_CASE_FIXTURE(TFFixture, "reduce_union_of_error_nil_table_with_table")
+{
+    ScopedFastFlag sffs[] = {
+        {FFlag::LuauSolverV2, true},
+        {FFlag::LuauGetmetatableError, true},
+    };
+
+    TypeId refinement = arena->addType(TypeFunctionInstanceType{
+        getBuiltinTypeFunctions()->refineFunc,
+        {
+            arena->addType(UnionType{{builtinTypes_.errorType, builtinTypes_.nilType, builtinTypes_.tableType}}),
+            builtinTypes_.tableType
+        }
+    });
+    reduceTypeFunctions(refinement, Location{}, tfc, true);
+    CHECK_EQ("*error-type* | table", toString(refinement));
 }
 
 TEST_CASE_FIXTURE(Fixture, "generic_type_functions_should_not_get_stuck_or")
