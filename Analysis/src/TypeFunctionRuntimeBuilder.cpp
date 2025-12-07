@@ -19,7 +19,6 @@
 // used to control the recursion limit of any operations done by user-defined type functions
 // currently, controls serialization, deserialization, and `type.copy`
 LUAU_DYNAMIC_FASTINTVARIABLE(LuauTypeFunctionSerdeIterationLimit, 100'000);
-LUAU_FASTFLAG(LuauEmplaceNotPushBack)
 
 namespace Luau
 {
@@ -925,11 +924,7 @@ private:
 
     void deserializeChildren(TypeFunctionFunctionType* f2, FunctionType* f1)
     {
-        if (FFlag::LuauEmplaceNotPushBack)
-            functionScopes.emplace_back(queue.size(), f2);
-        else
-            functionScopes.push_back({queue.size(), f2});
-
+        functionScopes.emplace_back(queue.size(), f2);
         std::set<std::pair<bool, std::string>> genericNames;
 
         // Introduce generic function parameters into scope
@@ -950,10 +945,7 @@ private:
             genericNames.insert(nameKey);
 
             TypeId mapping = state->ctx->arena->addTV(Type(gty->isNamed ? GenericType{state->ctx->scope.get(), gty->name} : GenericType{}));
-            if (FFlag::LuauEmplaceNotPushBack)
-                genericTypes.emplace_back(gty->isNamed, gty->name, mapping);
-            else
-                genericTypes.push_back({gty->isNamed, gty->name, mapping});
+            genericTypes.emplace_back(gty->isNamed, gty->name, mapping);
         }
 
         for (auto tp : f2->genericPacks)
@@ -974,10 +966,7 @@ private:
 
             TypePackId mapping =
                 state->ctx->arena->addTypePack(TypePackVar(gtp->isNamed ? GenericTypePack{state->ctx->scope.get(), gtp->name} : GenericTypePack{}));
-            if (FFlag::LuauEmplaceNotPushBack)
-                genericPacks.emplace_back(gtp->isNamed, gtp->name, mapping);
-            else
-                genericPacks.push_back({gtp->isNamed, gtp->name, mapping});
+            genericPacks.emplace_back(gtp->isNamed, gtp->name, mapping);
         }
 
         f1->generics.reserve(f2->generics.size());
@@ -1030,9 +1019,19 @@ TypeFunctionTypeId serialize(TypeId ty, TypeFunctionRuntimeBuilderState* state)
     return TypeFunctionSerializer(state).serialize(ty);
 }
 
+TypeFunctionTypePackId serialize(TypePackId tp, TypeFunctionRuntimeBuilderState* state)
+{
+    return TypeFunctionSerializer(state).serialize(tp);
+}
+
 TypeId deserialize(TypeFunctionTypeId ty, TypeFunctionRuntimeBuilderState* state)
 {
     return TypeFunctionDeserializer(state).deserialize(ty);
+}
+
+TypePackId deserialize(TypeFunctionTypePackId tp, TypeFunctionRuntimeBuilderState* state)
+{
+    return TypeFunctionDeserializer(state).deserialize(tp);
 }
 
 } // namespace Luau

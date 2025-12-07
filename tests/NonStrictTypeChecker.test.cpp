@@ -15,8 +15,14 @@
 #include "doctest.h"
 #include <iostream>
 
+LUAU_DYNAMIC_FASTINT(LuauConstraintGeneratorRecursionLimit)
+
+LUAU_FASTINT(LuauNonStrictTypeCheckerRecursionLimit)
+LUAU_FASTINT(LuauCheckRecursionLimit)
 LUAU_FASTFLAG(LuauUnreducedTypeFunctionsDontTriggerWarnings)
 LUAU_FASTFLAG(LuauNewNonStrictBetterCheckedFunctionErrorMessage)
+LUAU_FASTFLAG(LuauAddRecursionCounterToNonStrictTypeChecker)
+LUAU_FASTFLAG(LuauExplicitTypeExpressionInstantiation)
 
 using namespace Luau;
 
@@ -458,6 +464,24 @@ end
     NONSTRICT_REQUIRE_CHECKED_ERR(Position(7, 10), "lower", result);
 }
 
+TEST_CASE_FIXTURE(NonStrictTypeCheckerFixture, "generic_type_instantiation")
+{
+    ScopedFastFlag sff{FFlag::LuauExplicitTypeExpressionInstantiation, true};
+
+    CheckResult result = checkNonStrict(R"(
+        function array<T>(): {T}
+            return {}
+        end
+
+        local foo = array<<number>>()
+        local bar = array<<string>>()
+    )");
+
+    LUAU_REQUIRE_NO_ERRORS(result);
+    CHECK_EQ("{number}", toString(requireType("foo")));
+    CHECK_EQ("{string}", toString(requireType("bar")));
+}
+
 TEST_CASE_FIXTURE(NonStrictTypeCheckerFixture, "function_def_if_assignment_no_errors")
 {
     CheckResult result = checkNonStrict(R"(
@@ -852,5 +876,39 @@ end
 
     LUAU_REQUIRE_NO_ERRORS(result);
 }
+
+TEST_CASE_FIXTURE(NonStrictTypeCheckerFixture, "nonstrict_check_block_recursion_limit")
+{
+    int limit = 250;
+
+    ScopedFastFlag sff{FFlag::LuauAddRecursionCounterToNonStrictTypeChecker, true};
+
+    ScopedFastInt luauNonStrictTypeCheckerRecursionLimit{FInt::LuauNonStrictTypeCheckerRecursionLimit, limit - 100};
+    ScopedFastInt luauConstraintGeneratorRecursionLimit{DFInt::LuauConstraintGeneratorRecursionLimit, limit + 500};
+    ScopedFastInt luauCheckRecursionLimit{FInt::LuauCheckRecursionLimit, limit + 500};
+
+    CheckResult result = checkNonStrict(rep("do ", limit) + "local a = 1" + rep(" end", limit));
+
+    // Nonstrict recursion limit just exits early and doesn't produce an error
+    LUAU_REQUIRE_NO_ERRORS(result);
+}
+
+#if 0 // CLI-181303 requires a ConstraintGenerator::checkPack fix to succeed in debug on Windows
+TEST_CASE_FIXTURE(NonStrictTypeCheckerFixture, "nonstrict_check_expr_recursion_limit")
+{
+    int limit = 250;
+
+    ScopedFastFlag sff{FFlag::LuauAddRecursionCounterToNonStrictTypeChecker, true};
+
+    ScopedFastInt luauNonStrictTypeCheckerRecursionLimit{FInt::LuauNonStrictTypeCheckerRecursionLimit, limit - 100};
+    ScopedFastInt luauConstraintGeneratorRecursionLimit{DFInt::LuauConstraintGeneratorRecursionLimit, limit + 500};
+    ScopedFastInt luauCheckRecursionLimit{FInt::LuauCheckRecursionLimit, limit + 500};
+
+    CheckResult result = checkNonStrict(R"(("foo"))" + rep(":lower()", limit));
+
+    // Nonstrict recursion limit just exits early and doesn't produce an error
+    LUAU_REQUIRE_NO_ERRORS(result);
+}
+#endif
 
 TEST_SUITE_END();
