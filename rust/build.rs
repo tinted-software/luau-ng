@@ -9,15 +9,7 @@ fn main() {
 	for link_path in luau.link_paths {
 		println!("cargo:rustc-link-search={}", link_path.display());
 	}
-	println!("cargo:rustc-link-search=luau/build");
-	println!("cargo:rustc-link-lib=Luau.Analysis");
-	println!("cargo:rustc-link-lib=Luau.CLI.lib");
-	println!("cargo:rustc-link-lib=Luau.CodeGen");
-	println!("cargo:rustc-link-lib=Luau.Compiler");
-	println!("cargo:rustc-link-lib=Luau.Config");
-	println!("cargo:rustc-link-lib=Luau.EqSat");
-	println!("cargo:rustc-link-lib=Luau.Require");
-	println!("cargo:rustc-link-lib=Luau.VM");
+	println!("cargo:rustc-link-search=build");
 
 	let cxx_stdlib = env::var("CXXSTDLIB").unwrap_or("c++".to_string());
 	println!("cargo:rustc-link-lib={cxx_stdlib}");
