@@ -40,7 +40,7 @@ jobs:
     name: ${{matrix.os.name}}
     runs-on: ${{matrix.os.version}}
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
     - name: configure
       run: cmake . -DCMAKE_BUILD_TYPE=Release
     - name: build
@@ -64,8 +64,8 @@ jobs:
     needs: ["create-release"]
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       with:
         repository: emscripten-core/emsdk
         path: emsdk
