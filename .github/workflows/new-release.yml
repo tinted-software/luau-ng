@@ -24,7 +24,7 @@ jobs:
           fi
       - name: create release
         id: create_release
-        uses: actions/create-release@v1
+        uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -40,7 +40,7 @@ jobs:
     name: ${{matrix.os.name}}
     runs-on: ${{matrix.os.version}}
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@50fbc622fc4ef5163becd7fab6573eac35f8462e # v1
     - name: configure
       run: cmake . -DCMAKE_BUILD_TYPE=Release
     - name: build
@@ -51,7 +51,7 @@ jobs:
     - name: pack
       if: matrix.os.name == 'windows'
       run: 7z a luau-${{matrix.os.name}}.zip .\Release\luau*.exe
-    - uses: actions/upload-release-asset@v1
+    - uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -64,8 +64,8 @@ jobs:
     needs: ["create-release"]
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@50fbc622fc4ef5163becd7fab6573eac35f8462e # v1
+    - uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
       with:
         repository: emscripten-core/emsdk
         path: emsdk
@@ -79,7 +79,7 @@ jobs:
         source emsdk/emsdk_env.sh
         emcmake cmake . -DLUAU_BUILD_WEB=ON -DCMAKE_BUILD_TYPE=Release
         make -j2 Luau.Web
-    - uses: actions/upload-release-asset@v1
+    - uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5 # v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
