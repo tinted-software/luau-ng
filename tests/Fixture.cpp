@@ -133,7 +133,7 @@ std::vector<std::unique_ptr<RequireNode>> TestRequireNode::getChildren() const
 
 std::vector<RequireAlias> TestRequireNode::getAvailableAliases() const
 {
-    return {{"defaultalias"}};
+    return {RequireAlias("defaultalias")};
 }
 
 std::unique_ptr<RequireNode> TestRequireSuggester::getNode(const ModuleName& name) const
@@ -176,7 +176,7 @@ std::optional<SourceCode> TestFileResolver::readSource(const ModuleName& name)
     return SourceCode{it->second, sourceType};
 }
 
-std::optional<ModuleInfo> TestFileResolver::resolveModule(const ModuleInfo* context, AstExpr* expr)
+std::optional<ModuleInfo> TestFileResolver::resolveModule(const ModuleInfo* context, AstExpr* expr, const TypeCheckLimits& limits)
 {
     if (AstExprGlobal* g = expr->as<AstExprGlobal>())
     {
@@ -249,7 +249,7 @@ std::optional<std::string> TestFileResolver::getEnvironmentForModule(const Modul
     return std::nullopt;
 }
 
-const Config& TestConfigResolver::getConfig(const ModuleName& name) const
+const Config& TestConfigResolver::getConfig(const ModuleName& name, const TypeCheckLimits& limits) const
 {
     auto it = configFiles.find(name);
     if (it != configFiles.end())
@@ -559,16 +559,16 @@ TypeId Fixture::requireExportedType(const ModuleName& moduleName, const std::str
     return it->second.type;
 }
 
-std::string Fixture::canonicalize(TypeId ty)
+TypeId Fixture::parseType(std::string_view src)
 {
-    if (!simplifier)
-        simplifier = newSimplifier(NotNull{&simplifierArena}, getBuiltins());
-
-    auto res = eqSatSimplify(NotNull{simplifier.get()}, ty);
-    if (res)
-        return toString(res->result);
-    else
-        return toString(ty);
+    return getFrontend().parseType(
+        NotNull{&allocator},
+        NotNull{&nameTable},
+        NotNull{&getFrontend().iceHandler},
+        TypeCheckLimits{},
+        NotNull{&arena},
+        src
+    );
 }
 
 std::string Fixture::decorateWithTypes(const std::string& code)
@@ -903,10 +903,10 @@ void registerHiddenTypes(Frontend& frontend)
 
     unfreeze(globals.globalTypes);
 
-    TypeId t = globals.globalTypes.addType(GenericType{"T"});
+    TypeId t = globals.globalTypes.addType(GenericType{"T", Polarity::Mixed});
     GenericTypeDefinition genericT{t};
 
-    TypeId u = globals.globalTypes.addType(GenericType{"U"});
+    TypeId u = globals.globalTypes.addType(GenericType{"U", Polarity::Mixed});
     GenericTypeDefinition genericU{u};
 
     ScopePtr globalScope = globals.globalScope;

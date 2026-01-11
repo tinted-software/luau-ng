@@ -8,9 +8,8 @@
 using namespace Luau;
 
 LUAU_FASTFLAG(LuauSolverV2)
-LUAU_FASTFLAG(LuauPushTypeConstraint2)
-LUAU_FASTFLAG(LuauPushTypeConstraintSingleton)
-LUAU_FASTFLAG(LuauPushTypeConstraintIndexer)
+LUAU_FASTFLAG(LuauBetterTypeMismatchErrors)
+LUAU_FASTFLAG(LuauPushTypeUnifyConstantHandling)
 
 TEST_SUITE_BEGIN("TypeSingletons");
 
@@ -69,7 +68,10 @@ TEST_CASE_FIXTURE(Fixture, "bool_singletons_mismatch")
     )");
 
     LUAU_REQUIRE_ERROR_COUNT(1, result);
-    CHECK_EQ("Type 'false' could not be converted into 'true'", toString(result.errors[0]));
+    if (FFlag::LuauBetterTypeMismatchErrors)
+        CHECK_EQ("Expected this to be 'true', but got 'false'", toString(result.errors[0]));
+    else
+        CHECK_EQ("Type 'false' could not be converted into 'true'", toString(result.errors[0]));
 }
 
 TEST_CASE_FIXTURE(Fixture, "string_singletons_mismatch")
@@ -79,7 +81,10 @@ TEST_CASE_FIXTURE(Fixture, "string_singletons_mismatch")
     )");
 
     LUAU_REQUIRE_ERROR_COUNT(1, result);
-    CHECK_EQ("Type '\"bar\"' could not be converted into '\"foo\"'", toString(result.errors[0]));
+    if (FFlag::LuauBetterTypeMismatchErrors)
+        CHECK_EQ("Expected this to be '\"foo\"', but got '\"bar\"'", toString(result.errors[0]));
+    else
+        CHECK_EQ("Type '\"bar\"' could not be converted into '\"foo\"'", toString(result.errors[0]));
 }
 
 TEST_CASE_FIXTURE(Fixture, "string_singletons_escape_chars")
@@ -89,7 +94,10 @@ TEST_CASE_FIXTURE(Fixture, "string_singletons_escape_chars")
     )");
 
     LUAU_REQUIRE_ERROR_COUNT(1, result);
-    CHECK_EQ(R"(Type '"\000\r"' could not be converted into '"\n"')", toString(result.errors[0]));
+    if (FFlag::LuauBetterTypeMismatchErrors)
+        CHECK_EQ(R"(Expected this to be '"\n"', but got '"\000\r"')", toString(result.errors[0]));
+    else
+        CHECK_EQ(R"(Type '"\000\r"' could not be converted into '"\n"')", toString(result.errors[0]));
 }
 
 TEST_CASE_FIXTURE(Fixture, "bool_singleton_subtype")
@@ -140,7 +148,10 @@ TEST_CASE_FIXTURE(Fixture, "function_call_with_singletons_mismatch")
     )");
 
     LUAU_REQUIRE_ERROR_COUNT(1, result);
-    CHECK_EQ("Type '\"bar\"' could not be converted into '\"foo\"'", toString(result.errors[0]));
+    if (FFlag::LuauBetterTypeMismatchErrors)
+        CHECK_EQ("Expected this to be '\"foo\"', but got '\"bar\"'", toString(result.errors[0]));
+    else
+        CHECK_EQ("Type '\"bar\"' could not be converted into '\"foo\"'", toString(result.errors[0]));
 }
 
 TEST_CASE_FIXTURE(Fixture, "overloaded_function_call_with_singletons")
@@ -191,7 +202,10 @@ TEST_CASE_FIXTURE(Fixture, "overloaded_function_call_with_singletons_mismatch")
     }
     else
     {
-        CHECK_EQ("Type 'number' could not be converted into 'string'", toString(result.errors[0]));
+        if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK_EQ("Expected this to be 'string', but got 'number'", toString(result.errors[0]));
+        else
+            CHECK_EQ("Type 'number' could not be converted into 'string'", toString(result.errors[0]));
         CHECK_EQ("Other overloads are also not viable: (false, number) -> ()", toString(result.errors[1]));
     }
 }
@@ -218,7 +232,17 @@ TEST_CASE_FIXTURE(Fixture, "enums_using_singletons_mismatch")
     LUAU_REQUIRE_ERROR_COUNT(1, result);
 
     if (FFlag::LuauSolverV2)
-        CHECK("Type '\"bang\"' could not be converted into '\"bar\" | \"baz\" | \"foo\"'" == toString(result.errors[0]));
+    {
+        if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK("Expected this to be '\"bar\" | \"baz\" | \"foo\"', but got '\"bang\"'" == toString(result.errors[0]));
+        else
+            CHECK("Type '\"bang\"' could not be converted into '\"bar\" | \"baz\" | \"foo\"'" == toString(result.errors[0]));
+    }
+    else if (FFlag::LuauBetterTypeMismatchErrors)
+        CHECK_EQ(
+            "Expected this to be '\"bar\" | \"baz\" | \"foo\"', but got '\"bang\"'; none of the union options are compatible",
+            toString(result.errors[0])
+        );
     else
         CHECK_EQ(
             "Type '\"bang\"' could not be converted into '\"bar\" | \"baz\" | \"foo\"'; none of the union options are compatible",
@@ -341,7 +365,10 @@ TEST_CASE_FIXTURE(Fixture, "table_properties_singleton_strings_mismatch")
     )");
 
     LUAU_REQUIRE_ERROR_COUNT(1, result);
-    CHECK_EQ("Type 'number' could not be converted into 'string'", toString(result.errors[0]));
+    if (FFlag::LuauBetterTypeMismatchErrors)
+        CHECK_EQ("Expected this to be 'string', but got 'number'", toString(result.errors[0]));
+    else
+        CHECK_EQ("Type 'number' could not be converted into 'string'", toString(result.errors[0]));
 }
 
 TEST_CASE_FIXTURE(Fixture, "table_properties_alias_or_parens_is_indexer")
@@ -399,8 +426,6 @@ TEST_CASE_FIXTURE(Fixture, "table_properties_type_error_escapes")
 
 TEST_CASE_FIXTURE(Fixture, "error_detailed_tagged_union_mismatch_string")
 {
-    ScopedFastFlag _{FFlag::LuauPushTypeConstraint2, true};
-
     CheckResult result = check(R"(
 type Cat = { tag: 'cat', catfood: string }
 type Dog = { tag: 'dog', dogfood: string }
@@ -415,6 +440,14 @@ local a: Animal = { tag = 'cat', cafood = 'something' }
             R"(Table type '{ cafood: string, tag: "cat" }' not compatible with type 'Cat' because the former is missing field 'catfood')" ==
             toString(result.errors[0])
         );
+    else if (FFlag::LuauBetterTypeMismatchErrors)
+    {
+        const std::string expected = R"(Expected this to be 'Cat | Dog', but got 'a'
+caused by:
+  None of the union options are compatible. For example:
+Table type 'a' not compatible with type 'Cat' because the former is missing field 'catfood')";
+        CHECK_EQ(expected, toString(result.errors[0]));
+    }
     else
     {
         const std::string expected = R"(Type 'a' could not be converted into 'Cat | Dog'
@@ -427,6 +460,10 @@ Table type 'a' not compatible with type 'Cat' because the former is missing fiel
 
 TEST_CASE_FIXTURE(Fixture, "error_detailed_tagged_union_mismatch_bool")
 {
+    ScopedFastFlag sffs[] = {
+        {FFlag::LuauBetterTypeMismatchErrors, true},
+        {FFlag::LuauPushTypeUnifyConstantHandling, true},
+    };
     CheckResult result = check(R"(
 type Good = { success: true, result: string }
 type Bad = { success: false, error: string }
@@ -437,10 +474,15 @@ local a: Result = { success = false, result = 'something' }
 
     LUAU_REQUIRE_ERROR_COUNT(1, result);
     if (FFlag::LuauSolverV2)
-        CHECK("Type '{ result: string, success: boolean }' could not be converted into 'Bad | Good'" == toString(result.errors[0]));
+    {
+        CHECK_EQ(
+            "Table type '{ result: string, success: false }' not compatible with type 'Bad' because the former is missing field 'error'",
+            toString(result.errors[0])
+        );
+    }
     else
     {
-        const std::string expected = R"(Type 'a' could not be converted into 'Bad | Good'
+        const std::string expected = R"(Expected this to be 'Bad | Good', but got 'a'
 caused by:
   None of the union options are compatible. For example:
 Table type 'a' not compatible with type 'Bad' because the former is missing field 'error')";
@@ -452,6 +494,8 @@ TEST_CASE_FIXTURE(Fixture, "parametric_tagged_union_alias")
 {
     ScopedFastFlag sff[] = {
         {FFlag::LuauSolverV2, true},
+        {FFlag::LuauBetterTypeMismatchErrors, true},
+        {FFlag::LuauPushTypeUnifyConstantHandling, true},
     };
     CheckResult result = check(R"(
         type Ok<T> = {success: true, result: T}
@@ -464,11 +508,10 @@ TEST_CASE_FIXTURE(Fixture, "parametric_tagged_union_alias")
 
     LUAU_REQUIRE_ERROR_COUNT(1, result);
 
-    const std::string expectedError = "Type\n\t"
-                                      "'{ result: string, success: boolean }'"
-                                      "\ncould not be converted into\n\t"
-                                      "'Err<number> | Ok<string>'";
-    CHECK(toString(result.errors[0]) == expectedError);
+    CHECK_EQ(
+        "Table type '{ result: string, success: false }' not compatible with type 'Err<number>' because the former is missing field 'error'",
+        toString(result.errors[0])
+    );
 }
 
 TEST_CASE_FIXTURE(Fixture, "if_then_else_expression_singleton_options")
@@ -665,8 +708,6 @@ TEST_CASE_FIXTURE(BuiltinsFixture, "singletons_stick_around_under_assignment")
 
 TEST_CASE_FIXTURE(Fixture, "tagged_union_in_ternary")
 {
-    ScopedFastFlag _{FFlag::LuauPushTypeConstraint2, true};
-
     LUAU_REQUIRE_NO_ERRORS(check(R"(
         type Result = { type: "ok", value: unknown } | { type: "error" }
 
@@ -680,8 +721,6 @@ TEST_CASE_FIXTURE(Fixture, "tagged_union_in_ternary")
 
 TEST_CASE_FIXTURE(Fixture, "table_literal_with_singleton_union_values")
 {
-    ScopedFastFlag _{FFlag::LuauPushTypeConstraint2, true};
-
     CheckResult result = check(R"(
         local t1: {[string]: "a" | "b"} = { a = "a", b = "b" }
         local t2: {[string]: "a" | true} = { a = "a", b = true }
@@ -693,8 +732,6 @@ TEST_CASE_FIXTURE(Fixture, "table_literal_with_singleton_union_values")
 
 TEST_CASE_FIXTURE(Fixture, "singleton_type_mismatch_via_variable")
 {
-    ScopedFastFlag _{FFlag::LuauPushTypeConstraint2, true};
-
     CheckResult result = check(R"(
         local c = "c"
         local x: "a" = c
@@ -713,8 +750,6 @@ TEST_CASE_FIXTURE(Fixture, "singleton_type_mismatch_via_variable")
 
 TEST_CASE_FIXTURE(Fixture, "cli_163481_any_indexer_pushes_type")
 {
-    ScopedFastFlag _{FFlag::LuauPushTypeConstraint2, true};
-
     LUAU_REQUIRE_NO_ERRORS(check(R"(
         --!strict
 
@@ -733,11 +768,7 @@ TEST_CASE_FIXTURE(Fixture, "cli_163481_any_indexer_pushes_type")
 
 TEST_CASE_FIXTURE(Fixture, "oss_2010")
 {
-    ScopedFastFlag sffs[] = {
-        {FFlag::LuauSolverV2, true},
-        {FFlag::LuauPushTypeConstraint2, true},
-        {FFlag::LuauPushTypeConstraintSingleton, true},
-    };
+    ScopedFastFlag _{FFlag::LuauSolverV2, true};
 
     LUAU_REQUIRE_NO_ERRORS(check(R"(
         local function foo<T>(my_enum: "" | T): T
@@ -752,11 +783,7 @@ TEST_CASE_FIXTURE(Fixture, "oss_2010")
 
 TEST_CASE_FIXTURE(Fixture, "oss_1773")
 {
-    ScopedFastFlag sffs[] = {
-        {FFlag::LuauSolverV2, true},
-        {FFlag::LuauPushTypeConstraint2, true},
-        {FFlag::LuauPushTypeConstraintIndexer, true},
-    };
+    ScopedFastFlag _{FFlag::LuauSolverV2, true};
 
     LUAU_REQUIRE_NO_ERRORS(check(R"(
         --!strict
@@ -783,11 +810,7 @@ TEST_CASE_FIXTURE(Fixture, "oss_1773")
 
 TEST_CASE_FIXTURE(Fixture, "bidirectionally_infer_indexers_errored")
 {
-    ScopedFastFlag sffs[] = {
-        {FFlag::LuauSolverV2, true},
-        {FFlag::LuauPushTypeConstraint2, true},
-        {FFlag::LuauPushTypeConstraintIndexer, true},
-    };
+    ScopedFastFlag _{FFlag::LuauSolverV2, true};
 
     CheckResult result = check(R"(
         --!strict
@@ -809,10 +832,65 @@ TEST_CASE_FIXTURE(Fixture, "bidirectionally_infer_indexers_errored")
 
 TEST_CASE_FIXTURE(Fixture, "oss_2018")
 {
-    ScopedFastFlag _{FFlag::LuauPushTypeConstraint2, true};
-
     LUAU_REQUIRE_NO_ERRORS(check(R"(
         local rule: { rule: "AppendTextComment" } | { rule: "Other" } = { rule = "AppendTextComment" }
+    )"));
+}
+
+TEST_CASE_FIXTURE(Fixture, "oss_2010_but_with_booleans")
+{
+    ScopedFastFlag sffs[] = {
+        {FFlag::LuauSolverV2, true},
+        {FFlag::LuauPushTypeUnifyConstantHandling, true},
+    };
+
+    CheckResult results = check(R"(
+        local function foo<T>(my_enum: true | T): T
+            return my_enum :: T
+        end
+
+        local function bar<T>(my_enum: true & T): T
+            return my_enum :: T
+        end
+
+        local var1 = foo(true)
+        local var2 = foo(false)
+
+        local var3 = bar(true)
+        local var4 = bar(false)
+    )");
+
+    LUAU_REQUIRE_ERROR_COUNT(1, results);
+    auto err = get<TypeMismatch>(results.errors[0]);
+    REQUIRE(err);
+    CHECK_EQ("true", toString(err->wantedType));
+    CHECK_EQ("false", toString(err->givenType));
+
+    // FIXME: That one seems arguably correct.
+    CHECK_EQ("unknown", toString(requireType("var1")));
+    CHECK_EQ("false", toString(requireType("var2")));
+    CHECK_EQ("true", toString(requireType("var3")));
+    CHECK_EQ("false", toString(requireType("var4")));
+}
+
+TEST_CASE_FIXTURE(Fixture, "cli_184125")
+{
+    ScopedFastFlag sffs[] = {
+        {FFlag::LuauSolverV2, true},
+        {FFlag::LuauPushTypeUnifyConstantHandling, true},
+    };
+
+    LUAU_REQUIRE_NO_ERRORS(check(R"(
+        type MyTypeA = {Value: true}
+        type MyTypeB = {Value: false}
+
+        local function Func(input: number) : (MyTypeA | MyTypeB)
+            if input == 1 then
+                return {Value = true}
+            else
+                return {Value = false}
+            end
+        end
     )"));
 }
 

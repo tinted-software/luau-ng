@@ -27,7 +27,8 @@ LUAU_FASTFLAG(LuauSolverV2)
 LUAU_FASTINT(LuauTypeInferIterationLimit)
 LUAU_FASTINT(LuauTypeInferRecursionLimit)
 LUAU_FASTFLAGVARIABLE(DebugLuauMagicVariableNames)
-LUAU_FASTFLAG(LuauAutocompleteAttributes)
+LUAU_FASTFLAGVARIABLE(LuauAutocompleteSingletonsInIndexer)
+LUAU_FASTFLAGVARIABLE(LuauSolverAgnosticPropType)
 
 static constexpr std::array<std::string_view, 12> kStatementStartingKeywords =
     {"while", "if", "local", "repeat", "function", "do", "for", "return", "break", "continue", "type", "export"};
@@ -165,7 +166,6 @@ static bool checkTypeMatch(
 {
     InternalErrorReporter iceReporter;
     UnifierSharedState unifierState(&iceReporter);
-    SimplifierPtr simplifier = newSimplifier(NotNull{typeArena}, builtinTypes);
     Normalizer normalizer{typeArena, builtinTypes, NotNull{&unifierState}, module.checkedInNewSolver ? SolverMode::New : SolverMode::Old};
     if (module.checkedInNewSolver)
     {
@@ -177,9 +177,7 @@ static bool checkTypeMatch(
         unifierState.counters.recursionLimit = FInt::LuauTypeInferRecursionLimit;
         unifierState.counters.iterationLimit = FInt::LuauTypeInferIterationLimit;
 
-        Subtyping subtyping{
-            builtinTypes, NotNull{typeArena}, NotNull{simplifier.get()}, NotNull{&normalizer}, NotNull{&typeFunctionRuntime}, NotNull{&iceReporter}
-        };
+        Subtyping subtyping{builtinTypes, NotNull{typeArena}, NotNull{&normalizer}, NotNull{&typeFunctionRuntime}, NotNull{&iceReporter}};
 
         return subtyping.isSubtype(subTy, superTy, scope).isSubtype;
     }
@@ -323,6 +321,38 @@ static void autocompleteProps(
         return calledWithSelf;
     };
 
+    auto maybeFillSingletonProp = [&](TypeId type)
+    {
+        if (auto singletonTy = get<SingletonType>(type))
+        {
+            if (auto stringSingleton = get<StringSingleton>(singletonTy))
+            {
+
+                TypeCorrectKind typeCorrect = indexType == PropIndexType::Key
+                                                  ? TypeCorrectKind::Correct
+                                                  : checkTypeCorrectKind(module, typeArena, builtinTypes, nodes.back(), {{}, {}}, type);
+
+                ParenthesesRecommendation parens =
+                    indexType == PropIndexType::Key ? ParenthesesRecommendation::None : getParenRecommendation(ty, nodes, typeCorrect);
+
+                result[stringSingleton->value] = AutocompleteEntry{
+                    AutocompleteEntryKind::String,
+                    type,
+                    /* deprecated */ false,
+                    isWrongIndexer(type),
+                    typeCorrect,
+                    containingExternType,
+                    std::nullopt,
+                    std::nullopt,
+                    {},
+                    parens,
+                    {},
+                    indexType == PropIndexType::Colon
+                };
+            }
+        }
+    };
+
     auto fillProps = [&](const ExternType::Props& props)
     {
         for (const auto& [name, prop] : props)
@@ -333,7 +363,7 @@ static void autocompleteProps(
             {
                 Luau::TypeId type;
 
-                if (FFlag::LuauSolverV2)
+                if (FFlag::LuauSolverV2 || FFlag::LuauSolverAgnosticPropType)
                 {
                     if (auto ty = prop.readTy)
                         type = follow(*ty);
@@ -374,7 +404,14 @@ static void autocompleteProps(
         if (indexIt != mtable->props.end())
         {
             TypeId followed;
-            if (FFlag::LuauSolverV2)
+            if (FFlag::LuauSolverAgnosticPropType)
+            {
+                if (auto propTy = indexIt->second.readTy)
+                {
+                    followed = follow(*propTy);
+                }
+            }
+            else if (FFlag::LuauSolverV2)
                 followed = follow(*indexIt->second.readTy);
             else
                 followed = follow(indexIt->second.type_DEPRECATED());
@@ -399,7 +436,20 @@ static void autocompleteProps(
             autocompleteProps(module, typeArena, builtinTypes, rootTy, *cls->parent, indexType, nodes, result, seen, containingExternType);
     }
     else if (auto tbl = get<TableType>(ty))
+    {
         fillProps(tbl->props);
+        if (FFlag::LuauAutocompleteSingletonsInIndexer && tbl->indexer && indexType == PropIndexType::Point)
+        {
+            auto indexerTy = follow(tbl->indexer->indexType);
+            if (auto utv = get<UnionType>(indexerTy))
+            {
+                for (auto option : utv)
+                    maybeFillSingletonProp(option);
+            }
+            else
+                maybeFillSingletonProp(indexerTy);
+        }
+    }
     else if (auto mt = get<MetatableType>(ty))
     {
         autocompleteProps(module, typeArena, builtinTypes, rootTy, mt->table, indexType, nodes, result, seen);
@@ -602,7 +652,7 @@ static void autocompleteStringSingleton(TypeId ty, bool addQuotes, AstNode* node
     }
 };
 
-static bool canSuggestInferredType(ScopePtr scope, TypeId ty)
+static bool canSuggestInferredType(TypeId ty)
 {
     ty = follow(ty);
 
@@ -624,6 +674,25 @@ static bool canSuggestInferredType(ScopePtr scope, TypeId ty)
     }
 
     // We might still have a type with cycles or one that is too long, we'll check that later
+    return true;
+}
+
+static bool canSuggestInferredType(TypePackId ty)
+{
+    ty = follow(ty);
+
+    if (get<ErrorTypePack>(ty) || get<GenericTypePack>(ty) || get<FreeTypePack>(ty))
+        return false;
+
+    auto [head, tail] = flatten(ty);
+    for (TypeId headTy : head)
+    {
+        if (!canSuggestInferredType(headTy))
+            return false;
+    }
+
+    // We skip recursively checking the tail here, as it could be cyclic and
+    // cause stack overflows. This case is handled later.
     return true;
 }
 
@@ -748,10 +817,18 @@ static std::optional<std::string> tryToStringDetailed(const ScopePtr& scope, T t
 
 static std::optional<Name> tryGetTypeNameInScope(ScopePtr scope, TypeId ty, bool functionTypeArguments = false)
 {
-    if (!canSuggestInferredType(scope, ty))
+    if (!canSuggestInferredType(ty))
         return std::nullopt;
 
     return tryToStringDetailed(scope, ty, functionTypeArguments);
+}
+
+static std::optional<Name> tryGetTypeNameInScope(ScopePtr scope, TypePackId tp, bool functionTypeArguments = false)
+{
+    if (!canSuggestInferredType(tp))
+        return std::nullopt;
+
+    return tryToStringDetailed(scope, tp, functionTypeArguments);
 }
 
 static bool tryAddTypeCorrectSuggestion(AutocompleteEntryMap& result, ScopePtr scope, AstType* topType, TypeId inferredType, Position position)
@@ -1705,7 +1782,7 @@ static std::string makeAnonymous(const ScopePtr& scope, const FunctionType& func
         std::optional<std::string> varArgType;
         if (const VariadicTypePack* pack = get<VariadicTypePack>(follow(*tail)))
         {
-            if (std::optional<std::string> res = tryToStringDetailed(scope, pack->ty, true))
+            if (std::optional<std::string> res = tryGetTypeNameInScope(scope, pack->ty, true))
                 varArgType = std::move(res);
         }
 
@@ -1720,7 +1797,7 @@ static std::string makeAnonymous(const ScopePtr& scope, const FunctionType& func
     auto [rets, retTail] = Luau::flatten(funcTy.retTypes);
     if (const size_t totalRetSize = rets.size() + (retTail ? 1 : 0); totalRetSize > 0)
     {
-        if (std::optional<std::string> returnTypes = tryToStringDetailed(scope, funcTy.retTypes, true))
+        if (std::optional<std::string> returnTypes = tryGetTypeNameInScope(scope, funcTy.retTypes, true))
         {
             result += ": ";
             bool wrap = totalRetSize != 1;
@@ -2106,17 +2183,14 @@ AutocompleteResult autocomplete_(
     }
     else if (AstExprFunction* func = node->as<AstExprFunction>())
     {
-        if (FFlag::LuauAutocompleteAttributes)
+        for (AstAttr* attr : func->attributes)
         {
-            for (AstAttr* attr : func->attributes)
+            if (attr->location.begin <= position && position <= attr->location.end && attr->type == AstAttr::Type::Unknown)
             {
-                if (attr->location.begin <= position && position <= attr->location.end && attr->type == AstAttr::Type::Unknown)
-                {
-                    AutocompleteEntryMap ret;
-                    for (const auto& attr : kKnownAttributes)
-                        ret[attr.c_str()] = {AutocompleteEntryKind::Keyword};
-                    return {std::move(ret), std::move(ancestry), AutocompleteContext::Keyword};
-                }
+                AutocompleteEntryMap ret;
+                for (const auto& attr : kKnownAttributes)
+                    ret[attr.c_str()] = {AutocompleteEntryKind::Keyword};
+                return {std::move(ret), std::move(ancestry), AutocompleteContext::Keyword};
             }
         }
     }

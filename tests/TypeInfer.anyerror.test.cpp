@@ -375,7 +375,7 @@ local bar = foo.nutrition + 100
     LUAU_REQUIRE_ERROR_COUNT(1, result);
 
     // We should definitely get this error
-    CHECK_EQ("Unknown global 'makesandwich'", toString(result.errors[0]));
+    CHECK_EQ("Unknown global 'makesandwich'; consider assigning to it first", toString(result.errors[0]));
     // We get this error if makesandwich() returns a free type
     // CHECK_EQ("Unknown type used in + operation; consider adding a type annotation to 'foo'", toString(result.errors[1]));
 }

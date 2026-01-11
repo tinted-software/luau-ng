@@ -3,6 +3,7 @@
 #include "Luau/TypeFunctionRuntime.h"
 
 #include "Luau/Allocator.h"
+#include "Luau/Common.h"
 #include "Luau/Lexer.h"
 #include "Luau/BuiltinTypeFunctions.h"
 #include "Luau/BytecodeBuilder.h"
@@ -10,6 +11,7 @@
 #include "Luau/Compiler.h"
 #include "Luau/DenseHash.h"
 #include "Luau/StringUtils.h"
+#include "Luau/Type.h"
 #include "Luau/TypeFunction.h"
 #include "Luau/TypeFunctionRuntimeBuilder.h"
 
@@ -21,6 +23,8 @@
 #include <vector>
 
 LUAU_DYNAMIC_FASTINT(LuauTypeFunctionSerdeIterationLimit)
+
+LUAU_FASTFLAGVARIABLE(LuauUnionofIntersectionofFlattens)
 
 namespace Luau
 {
@@ -213,6 +217,16 @@ TypeFunctionTypePackVar* allocateTypeFunctionTypePack(lua_State* L, TypeFunction
     return ctx->typePackArena.allocate(std::move(type));
 }
 
+void pushType(lua_State* L, TypeFunctionTypeId type)
+{
+    TypeFunctionTypeId* ptr = static_cast<TypeFunctionTypeId*>(lua_newuserdatatagged(L, sizeof(TypeFunctionTypeId), kTypeUserdataTag));
+    *ptr = type;
+
+    // set the new userdata's metatable to type metatable
+    luaL_getmetatable(L, "type");
+    lua_setmetatable(L, -2);
+}
+
 // Pushes a new type userdata onto the stack
 void allocTypeUserData(lua_State* L, TypeFunctionTypeVariant type)
 {
@@ -398,7 +412,7 @@ static int createSingleton(lua_State* L)
 }
 
 // Luau: `types.generic(name: string, ispack: boolean?) -> type
-// Create a generic type with the specified type. If an optinal boolean is set to true, result is a generic pack
+// Create a generic type with the specified type. If an optional boolean is set to true, result is a generic pack
 static int createGeneric(lua_State* L)
 {
     const char* name = luaL_checkstring(L, 1);
@@ -484,16 +498,42 @@ static int createUnion(lua_State* L)
 {
     // get the number of arguments for union
     int argSize = lua_gettop(L);
-    if (argSize < 2)
+    if (!FFlag::LuauUnionofIntersectionofFlattens && argSize < 2)
         luaL_error(L, "types.unionof: expected at least 2 types to union, but got %d", argSize);
 
     std::vector<TypeFunctionTypeId> components;
     components.reserve(argSize);
 
     for (int i = 1; i <= argSize; i++)
-        components.push_back(getTypeUserData(L, i));
+    {
+        if (FFlag::LuauUnionofIntersectionofFlattens)
+        {
+            TypeFunctionTypeId component = getTypeUserData(L, i);
 
-    allocTypeUserData(L, TypeFunctionUnionType{std::move(components)});
+            if (auto unionComponent = get<TypeFunctionUnionType>(component))
+                components.insert(components.end(), unionComponent->components.begin(), unionComponent->components.end());
+            else if (get<TypeFunctionNeverType>(component))
+                continue;
+            else
+                components.push_back(component);
+        }
+        else
+        {
+            components.push_back(getTypeUserData(L, i));
+        }
+    }
+    
+    if (FFlag::LuauUnionofIntersectionofFlattens)
+    {
+        if (components.size() == 0)
+            allocTypeUserData(L, TypeFunctionNeverType{});
+        else if (components.size() == 1)
+            pushType(L, components[0]);
+        else
+            allocTypeUserData(L, TypeFunctionUnionType{std::move(components)});
+    }
+    else
+        allocTypeUserData(L, TypeFunctionUnionType{std::move(components)});
 
     return 1;
 }
@@ -504,16 +544,42 @@ static int createIntersection(lua_State* L)
 {
     // get the number of arguments for intersection
     int argSize = lua_gettop(L);
-    if (argSize < 2)
+    if (!FFlag::LuauUnionofIntersectionofFlattens && argSize < 2)
         luaL_error(L, "types.intersectionof: expected at least 2 types to intersection, but got %d", argSize);
 
     std::vector<TypeFunctionTypeId> components;
     components.reserve(argSize);
 
     for (int i = 1; i <= argSize; i++)
-        components.push_back(getTypeUserData(L, i));
+    {
+        if (FFlag::LuauUnionofIntersectionofFlattens)
+        {
+            TypeFunctionTypeId component = getTypeUserData(L, i);
 
-    allocTypeUserData(L, TypeFunctionIntersectionType{std::move(components)});
+            if (auto intersectionComponent = get<TypeFunctionIntersectionType>(component))
+                components.insert(components.end(), intersectionComponent->components.begin(), intersectionComponent->components.end());
+            else if (get<TypeFunctionUnknownType>(component))
+                continue;
+            else
+                components.push_back(component);
+        }
+        else
+        {
+            components.push_back(getTypeUserData(L, i));
+        }
+    }
+    
+    if (FFlag::LuauUnionofIntersectionofFlattens)
+    {
+        if (components.size() == 0)
+            allocTypeUserData(L, TypeFunctionUnknownType{});
+        else if (components.size() == 1)
+            pushType(L, components[0]);
+        else
+            allocTypeUserData(L, TypeFunctionIntersectionType{std::move(components)});
+    }
+    else
+        allocTypeUserData(L, TypeFunctionIntersectionType{std::move(components)});
 
     return 1;
 }
@@ -1040,7 +1106,7 @@ static TypeFunctionTypePackId getTypePack(lua_State* L, int headIdx, int tailIdx
     return result;
 }
 
-static void pushTypePack(lua_State* L, TypeFunctionTypePackId tp)
+void pushTypePack(lua_State* L, TypeFunctionTypePackId tp)
 {
     if (auto tftp = get<TypeFunctionTypePack>(tp))
     {

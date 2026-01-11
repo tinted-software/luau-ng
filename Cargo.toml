@@ -1,6 +1,6 @@
 [package]
-name = "tinted_luau_sys"
-version = "0.1.2"
+name = "luau-ng"
+version = "1.0.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/tinted-software/luau-ng"

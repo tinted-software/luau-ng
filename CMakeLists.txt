@@ -1,3 +1,4 @@
+
 cmake_minimum_required(VERSION 4.0)
 
 set(CMAKE_DISABLE_IN_SOURCE_BUILDS ON)
@@ -381,3 +382,4 @@ if(LUAU_BUILD_CLI)
         Luau.Bytecode.CLI
     )
 endif()
+

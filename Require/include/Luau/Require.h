@@ -86,6 +86,16 @@ typedef struct luarequire_Configuration
     // alias's path cannot be resolved relative to its configuration file.
     luarequire_NavigateResult (*jump_to_alias)(lua_State* L, void* ctx, const char* path);
 
+    // Provides an initial alias override opportunity prior to searching for
+    // configuration files. If NAVIGATE_SUCCESS is returned, the internal state
+    // must be updated to point at the aliased location. Can be left undefined.
+    luarequire_NavigateResult (*to_alias_override)(lua_State* L, void* ctx, const char* alias_unprefixed);
+
+    // Provides a final opportunity to resolve an alias if it cannot be found in
+    // configuration files. If NAVIGATE_SUCCESS is returned, the internal state
+    // must be updated to point at the aliased location. Can be left undefined.
+    luarequire_NavigateResult (*to_alias_fallback)(lua_State* L, void* ctx, const char* alias_unprefixed);
+
     // Navigates through the context by making mutations to the internal state.
     luarequire_NavigateResult (*to_parent)(lua_State* L, void* ctx);
     luarequire_NavigateResult (*to_child)(lua_State* L, void* ctx, const char* name);

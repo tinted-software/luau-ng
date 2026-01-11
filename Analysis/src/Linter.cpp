@@ -9,12 +9,14 @@
 #include "Luau/Common.h"
 
 #include <algorithm>
-#include <math.h>
-#include <limits.h>
+#include <cmath>
+#include <climits>
 
 LUAU_FASTINTVARIABLE(LuauSuggestionDistance, 4)
 
 LUAU_FASTFLAG(LuauSolverV2)
+
+LUAU_FASTFLAG(LuauExplicitTypeInstantiationSyntax)
 
 namespace Luau
 {
@@ -188,6 +190,11 @@ static bool similar(AstExpr* lhs, AstExpr* rhs)
 
         return true;
     }
+    CASE(AstExprInstantiate)
+    {
+        LUAU_ASSERT(FFlag::LuauExplicitTypeInstantiationSyntax);
+        return similar(le->expr, re->expr);
+    }
     else
     {
         LUAU_ASSERT(!"Unknown expression type");
@@ -267,7 +274,9 @@ private:
             Global* g = globals.find(gv->name);
 
             if (!g || (!g->assigned && !g->builtin))
-                emitWarning(*context, LintWarning::Code_UnknownGlobal, gv->location, "Unknown global '%s'", gv->name.value);
+                emitWarning(
+                    *context, LintWarning::Code_UnknownGlobal, gv->location, "Unknown global '%s'; consider assigning to it first", gv->name.value
+                );
             else if (g->deprecated)
             {
                 if (const char* replacement = *g->deprecated; replacement && strlen(replacement))

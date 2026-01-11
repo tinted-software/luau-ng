@@ -1,14 +1,14 @@
 {
-  lib,
   self ? ../.,
   stdenv,
   cmake,
   ninja,
   doctest,
 }:
+
 stdenv.mkDerivation {
   pname = "luau-ng";
-  version = "1.2.0";
+  version = "1.0.0";
 
   src = self;
 
@@ -18,15 +18,19 @@ stdenv.mkDerivation {
   ];
 
   checkInputs = [
-    doctest
+    # TODO: https://github.com/NixOS/nixpkgs/issues/478885
+    (doctest.overrideAttrs (old: {
+      cmakeFlags = old.cmakeFlags ++ [
+        "-DDOCTEST_WITH_TESTS=OFF"
+      ];
+    }))
   ];
 
   doCheck = true;
 
-  outputs = ["bin" "out" "dev"];
-
-  # Don't enable LTO with gcc because ld.bfd is very slow
-  cmakeFlags = lib.optionals (stdenv.hostPlatform.useLLVM) [
-    "-DLUAU_ENABLE_LTO=OFF"
+  outputs = [
+    "bin"
+    "out"
+    "dev"
   ];
 }

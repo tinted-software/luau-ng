@@ -6,6 +6,7 @@
 #include "Luau/Type.h"
 #include "Luau/TypeOrPack.h"
 #include "Luau/TypePack.h"
+#include "Luau/TypeUtils.h"
 #include "Luau/Unifiable.h"
 #include "Luau/VisitType.h"
 
@@ -272,7 +273,7 @@ private:
 
     void cloneChildren(GenericType* t)
     {
-        // TOOD: clone upper bounds.
+        // TODO: clone upper bounds.
     }
 
     void cloneChildren(PrimitiveType* t)
@@ -409,7 +410,7 @@ private:
 
     void cloneChildren(GenericTypePack* t)
     {
-        // TOOD: clone upper bounds.
+        // TODO: clone upper bounds.
     }
 
     void cloneChildren(BlockedTypePack* t)

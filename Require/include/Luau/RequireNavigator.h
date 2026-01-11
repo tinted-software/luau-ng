@@ -13,19 +13,20 @@ struct lua_State;
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-// The RequireNavigator library provides a C++ interface for navigating the
-// context in which require-by-string operates. This is used internally by the
-// require-by-string runtime library to resolve paths based on the rules defined
-// by its consumers.
+// This file provides a C++ interface for navigating the context in which
+// require-by-string operates. This is used internally by the require-by-string
+// runtime library to resolve paths based on the rules defined by its consumers.
 //
-// Directly linking against this library allows for inspection of the
-// require-by-string path resolution algorithm's behavior without enabling the
-// runtime library, which is useful for static tooling as well.
+// Including this file directly allows for inspection of the require-by-string
+// path resolution algorithm's behavior without enabling the runtime library,
+// which can be useful for static tooling.
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace Luau::Require
 {
+
+class AliasCycleTracker;
 
 // The ErrorHandler interface is used to report errors during navigation.
 // The default implementation does nothing but can be overridden to enable
@@ -59,6 +60,15 @@ public:
 
     virtual NavigateResult reset(const std::string& identifier) = 0;
     virtual NavigateResult jumpToAlias(const std::string& path) = 0;
+
+    virtual NavigateResult toAliasOverride(const std::string& aliasUnprefixed)
+    {
+        return NavigateResult::NotFound;
+    };
+    virtual NavigateResult toAliasFallback(const std::string& aliasUnprefixed)
+    {
+        return NavigateResult::NotFound;
+    };
 
     virtual NavigateResult toParent() = 0;
     virtual NavigateResult toChild(const std::string& component) = 0;
@@ -110,13 +120,16 @@ private:
     using Error = std::optional<std::string>;
     [[nodiscard]] Error navigateImpl(std::string_view path);
     [[nodiscard]] Error navigateThroughPath(std::string_view path);
-    [[nodiscard]] Error navigateToAlias(const std::string& alias, const std::string& value);
-    [[nodiscard]] Error navigateToAndPopulateConfig(const std::string& desiredAlias);
+    [[nodiscard]] Error navigateToAlias(const std::string& alias, const Config& config, AliasCycleTracker cycleTracker);
+    [[nodiscard]] Error navigateToAndPopulateConfig(const std::string& desiredAlias, Config& config);
 
     [[nodiscard]] Error resetToRequirer();
     [[nodiscard]] Error jumpToAlias(const std::string& aliasPath);
     [[nodiscard]] Error navigateToParent(std::optional<std::string> previousComponent);
     [[nodiscard]] Error navigateToChild(const std::string& component);
+
+    [[nodiscard]] std::pair<Error, bool> toAliasOverride(const std::string& aliasUnprefixed);
+    [[nodiscard]] Error toAliasFallback(const std::string& aliasUnprefixed);
 
     NavigationContext& navigationContext;
     ErrorHandler& errorHandler;

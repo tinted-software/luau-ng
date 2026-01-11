@@ -15,8 +15,8 @@ using namespace Luau;
 using std::nullopt;
 
 LUAU_FASTFLAG(LuauSolverV2)
-LUAU_FASTFLAG(LuauPushTypeConstraint2)
-LUAU_FASTFLAG(LuauExternTableIndexersIntersect)
+LUAU_FASTFLAG(LuauBetterTypeMismatchErrors)
+LUAU_FASTFLAG(LuauSubtypingHandlesExternTypesWithIndexers)
 
 TEST_SUITE_BEGIN("TypeInferExternTypes");
 
@@ -401,7 +401,10 @@ TEST_CASE_FIXTURE(ExternTypeFixture, "table_class_unification_reports_sane_error
     if (FFlag::LuauSolverV2)
     {
         LUAU_REQUIRE_ERROR_COUNT(1, result);
-        CHECK("Type 'Vector2' could not be converted into '{ Y: number, w: number, x: number }'" == toString(result.errors[0]));
+        if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK("Expected this to be '{ Y: number, w: number, x: number }', but got 'Vector2'" == toString(result.errors[0]));
+        else
+            CHECK("Type 'Vector2' could not be converted into '{ Y: number, w: number, x: number }'" == toString(result.errors[0]));
     }
     else
     {
@@ -421,8 +424,16 @@ TEST_CASE_FIXTURE(ExternTypeFixture, "class_unification_type_mismatch_is_correct
 
     LUAU_REQUIRE_ERROR_COUNT(2, result);
 
-    REQUIRE_EQ("Type 'BaseClass' could not be converted into 'number'", toString(result.errors.at(0)));
-    REQUIRE_EQ("Type 'number' could not be converted into 'BaseClass'", toString(result.errors[1]));
+    if (FFlag::LuauBetterTypeMismatchErrors)
+    {
+        REQUIRE_EQ("Expected this to be 'number', but got 'BaseClass'", toString(result.errors.at(0)));
+        REQUIRE_EQ("Expected this to be 'BaseClass', but got 'number'", toString(result.errors[1]));
+    }
+    else
+    {
+        REQUIRE_EQ("Type 'BaseClass' could not be converted into 'number'", toString(result.errors.at(0)));
+        REQUIRE_EQ("Type 'number' could not be converted into 'BaseClass'", toString(result.errors[1]));
+    }
 }
 
 TEST_CASE_FIXTURE(ExternTypeFixture, "optional_class_field_access_error")
@@ -455,16 +466,25 @@ b(a)
 
     LUAU_REQUIRE_ERROR_COUNT(1, result);
 
+
     if (FFlag::LuauSolverV2)
     {
-        const std::string expected = "Type 'Vector2' could not be converted into '{ read X: unknown, read Y: string }'; \n"
-                                     "this is because accessing `Y` results in `number` in the former type and `string` in the latter type, "
-                                     "and `number` is not a subtype of `string`";
+        const std::string expected = FFlag::LuauBetterTypeMismatchErrors
+                                         ? "Expected this to be '{ read X: unknown, read Y: string }', but got 'Vector2'; \n"
+                                           "accessing `Y` results in `number` in the latter type and `string` in the former type, "
+                                           "and `number` is not a subtype of `string`"
+                                         : "Type 'Vector2' could not be converted into '{ read X: unknown, read Y: string }'; \n"
+                                           "this is because accessing `Y` results in `number` in the former type and `string` in the latter type, "
+                                           "and `number` is not a subtype of `string`";
         CHECK_EQ(expected, toString(result.errors.at(0)));
     }
     else
     {
-        const std::string expected = R"(Type 'Vector2' could not be converted into '{- X: number, Y: string -}'
+        const std::string expected = FFlag::LuauBetterTypeMismatchErrors ? R"(Expected this to be '{- X: number, Y: string -}', but got 'Vector2'
+caused by:
+  Property 'Y' is not compatible.
+Expected this to be 'string', but got 'number')"
+                                                                         : R"(Type 'Vector2' could not be converted into '{- X: number, Y: string -}'
 caused by:
   Property 'Y' is not compatible.
 Type 'number' could not be converted into 'string')";
@@ -482,7 +502,10 @@ local a: ChildClass = i
     )");
 
     LUAU_REQUIRE_ERROR_COUNT(1, result);
-    CHECK_EQ("Type 'ChildClass' from 'Test' could not be converted into 'ChildClass' from 'MainModule'", toString(result.errors.at(0)));
+    if (FFlag::LuauBetterTypeMismatchErrors)
+        CHECK_EQ("Expected this to be 'ChildClass' from 'MainModule', but got 'ChildClass' from 'Test'", toString(result.errors.at(0)));
+    else
+        CHECK_EQ("Type 'ChildClass' from 'Test' could not be converted into 'ChildClass' from 'MainModule'", toString(result.errors.at(0)));
 }
 
 TEST_CASE_FIXTURE(ExternTypeFixture, "intersections_of_unions_of_extern_types")
@@ -547,14 +570,28 @@ local b: B = a
     LUAU_REQUIRE_ERRORS(result);
 
     if (FFlag::LuauSolverV2)
-        CHECK(
-            "Type 'A' could not be converted into 'B'; \n"
-            "this is because accessing `x` results in `ChildClass` in the former type and `BaseClass` in the latter type, and `ChildClass` is not "
-            "exactly `BaseClass`" == toString(result.errors.at(0))
-        );
+    {
+        if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK(
+                "Expected this to be 'B', but got 'A'; \n"
+                "accessing `x` results in `ChildClass` in the latter type and `BaseClass` in the former type, and `ChildClass` is not "
+                "exactly `BaseClass`" == toString(result.errors.at(0))
+            );
+        else
+            CHECK(
+                "Type 'A' could not be converted into 'B'; \n"
+                "this is because accessing `x` results in `ChildClass` in the former type and `BaseClass` in the latter type, and `ChildClass` is "
+                "not "
+                "exactly `BaseClass`" == toString(result.errors.at(0))
+            );
+    }
     else
     {
-        const std::string expected = R"(Type 'A' could not be converted into 'B'
+        const std::string expected = FFlag::LuauBetterTypeMismatchErrors ? R"(Expected this to be exactly 'B', but got 'A'
+caused by:
+  Property 'x' is not compatible.
+Expected this to be exactly 'BaseClass', but got 'ChildClass')"
+                                                                         : R"(Type 'A' could not be converted into 'B'
 caused by:
   Property 'x' is not compatible.
 Type 'ChildClass' could not be converted into 'BaseClass' in an invariant context)";
@@ -670,7 +707,16 @@ TEST_CASE_FIXTURE(ExternTypeFixture, "indexable_extern_types")
         )");
 
         if (FFlag::LuauSolverV2)
-            CHECK("Type 'boolean' could not be converted into 'number | string'" == toString(result.errors.at(0)));
+        {
+            if (FFlag::LuauBetterTypeMismatchErrors)
+                CHECK("Expected this to be 'number | string', but got 'boolean'" == toString(result.errors.at(0)));
+            else
+                CHECK("Type 'boolean' could not be converted into 'number | string'" == toString(result.errors.at(0)));
+        }
+        else if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK_EQ(
+                toString(result.errors.at(0)), "Expected this to be 'number | string', but got 'boolean'; none of the union options are compatible"
+            );
         else
             CHECK_EQ(
                 toString(result.errors.at(0)),
@@ -684,7 +730,16 @@ TEST_CASE_FIXTURE(ExternTypeFixture, "indexable_extern_types")
         )");
 
         if (FFlag::LuauSolverV2)
-            CHECK("Type 'boolean' could not be converted into 'number | string'" == toString(result.errors.at(0)));
+        {
+            if (FFlag::LuauBetterTypeMismatchErrors)
+                CHECK("Expected this to be 'number | string', but got 'boolean'" == toString(result.errors.at(0)));
+            else
+                CHECK("Type 'boolean' could not be converted into 'number | string'" == toString(result.errors.at(0)));
+        }
+        else if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK_EQ(
+                toString(result.errors.at(0)), "Expected this to be 'number | string', but got 'boolean'; none of the union options are compatible"
+            );
         else
             CHECK_EQ(
                 toString(result.errors.at(0)),
@@ -703,6 +758,8 @@ TEST_CASE_FIXTURE(ExternTypeFixture, "indexable_extern_types")
         {
             // Disabled for now.  CLI-115686
         }
+        else if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK_EQ(toString(result.errors.at(0)), "Expected this to be 'number', but got 'string'");
         else
             CHECK_EQ(toString(result.errors.at(0)), "Type 'string' could not be converted into 'number'");
     }
@@ -711,7 +768,11 @@ TEST_CASE_FIXTURE(ExternTypeFixture, "indexable_extern_types")
             local x : IndexableClass
             local str : string = x.key
         )");
-        CHECK_EQ(toString(result.errors.at(0)), "Type 'number' could not be converted into 'string'");
+
+        if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK_EQ(toString(result.errors.at(0)), "Expected this to be 'string', but got 'number'");
+        else
+            CHECK_EQ(toString(result.errors.at(0)), "Type 'number' could not be converted into 'string'");
     }
 
     // Check that we string key are rejected if the indexer's key type is not compatible with string
@@ -729,6 +790,8 @@ TEST_CASE_FIXTURE(ExternTypeFixture, "indexable_extern_types")
         )");
         if (FFlag::LuauSolverV2)
             CHECK_EQ(toString(result.errors.at(0)), "Key 'key' not found in class 'IndexableNumericKeyClass'");
+        else if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK_EQ(toString(result.errors.at(0)), "Expected this to be 'number', but got 'string'");
         else
             CHECK_EQ(toString(result.errors.at(0)), "Type 'string' could not be converted into 'number'");
     }
@@ -738,7 +801,11 @@ TEST_CASE_FIXTURE(ExternTypeFixture, "indexable_extern_types")
             local str : string
             x[str] = 1                  -- Index with a non-const string
         )");
-        CHECK_EQ(toString(result.errors.at(0)), "Type 'string' could not be converted into 'number'");
+
+        if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK_EQ(toString(result.errors.at(0)), "Expected this to be 'number', but got 'string'");
+        else
+            CHECK_EQ(toString(result.errors.at(0)), "Type 'string' could not be converted into 'number'");
     }
     {
         CheckResult result = check(R"(
@@ -754,6 +821,8 @@ TEST_CASE_FIXTURE(ExternTypeFixture, "indexable_extern_types")
         )");
         if (FFlag::LuauSolverV2)
             CHECK(toString(result.errors.at(0)) == "Key 'key' not found in class 'IndexableNumericKeyClass'");
+        else if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK_EQ(toString(result.errors.at(0)), "Expected this to be 'number', but got 'string'");
         else
             CHECK_EQ(toString(result.errors.at(0)), "Type 'string' could not be converted into 'number'");
     }
@@ -763,7 +832,11 @@ TEST_CASE_FIXTURE(ExternTypeFixture, "indexable_extern_types")
             local str : string
             local y = x[str]            -- Index with a non-const string
         )");
-        CHECK_EQ(toString(result.errors.at(0)), "Type 'string' could not be converted into 'number'");
+
+        if (FFlag::LuauBetterTypeMismatchErrors)
+            CHECK_EQ(toString(result.errors.at(0)), "Expected this to be 'number', but got 'string'");
+        else
+            CHECK_EQ(toString(result.errors.at(0)), "Type 'string' could not be converted into 'number'");
     }
 }
 
@@ -1032,10 +1105,7 @@ TEST_CASE_FIXTURE(BuiltinsFixture, "extern_type_check_key_becomes_intersection")
 
 TEST_CASE_FIXTURE(BuiltinsFixture, "extern_type_check_key_superset")
 {
-    ScopedFastFlag sffs[] = {
-        {FFlag::LuauSolverV2, true},
-        {FFlag::LuauPushTypeConstraint2, true},
-    };
+    ScopedFastFlag _{FFlag::LuauSolverV2, true};
 
     loadDefinition(R"(
         declare extern type Foobar with
@@ -1077,10 +1147,7 @@ TEST_CASE_FIXTURE(BuiltinsFixture, "extern_type_check_key_idempotent")
 
 TEST_CASE_FIXTURE(BuiltinsFixture, "extern_type_intersect_with_table_indexer")
 {
-    ScopedFastFlag sffs[] = {
-        {FFlag::LuauSolverV2, true},
-        {FFlag::LuauExternTableIndexersIntersect, true},
-    };
+    ScopedFastFlag sff{FFlag::LuauSolverV2, true};
 
     LUAU_REQUIRE_NO_ERRORS(check(R"(
         local function f(obj: { [any]: any }, functionName: string)
@@ -1095,10 +1162,7 @@ TEST_CASE_FIXTURE(BuiltinsFixture, "extern_type_intersect_with_table_indexer")
 
 TEST_CASE_FIXTURE(BuiltinsFixture, "extern_type_with_indexer_intersect_table")
 {
-    ScopedFastFlag sffs[] = {
-        {FFlag::LuauSolverV2, true},
-        {FFlag::LuauExternTableIndexersIntersect, true},
-    };
+    ScopedFastFlag sff{FFlag::LuauSolverV2, true};
 
     loadDefinition(R"(
         declare extern type Foobar with
@@ -1114,6 +1178,73 @@ TEST_CASE_FIXTURE(BuiltinsFixture, "extern_type_with_indexer_intersect_table")
     )"));
 
     CHECK_EQ("(Foobar) -> Foobar & { read Baz: number }", toString(requireType("update")));
+}
+
+TEST_CASE_FIXTURE(BuiltinsFixture, "extern_type_is_not_subtype_of_table")
+{
+    ScopedFastFlag _{FFlag::LuauSubtypingHandlesExternTypesWithIndexers, true};
+
+    loadDefinition(R"(
+        declare extern type Color3 with
+        end
+    )");
+
+    CheckResult result = check(R"(
+        local function f(c: Color3): { Color3 }
+            return c
+        end
+    )");
+    LUAU_REQUIRE_ERROR_COUNT(1, result);
+    auto err = get<TypeMismatch>(result.errors[0]);
+    CHECK_EQ("Color3", toString(err->givenType));
+    CHECK_EQ("{Color3}", toString(err->wantedType));
+}
+
+TEST_CASE_FIXTURE(BuiltinsFixture, "extern_type_overload")
+{
+    ScopedFastFlag _{FFlag::LuauSubtypingHandlesExternTypesWithIndexers, true};
+
+    loadDefinition(R"(
+        declare extern type Color3 with
+        end
+    )");
+
+    LUAU_REQUIRE_NO_ERRORS(check(R"(
+        local f : ((Color3) -> ()) & (({Color3}) -> ())
+        local c: Color3
+        f(c)
+    )"));
+}
+
+TEST_CASE_FIXTURE(BuiltinsFixture, "extern_type_indexer_interactions")
+{
+    ScopedFastFlag sffs[] = {
+        {FFlag::LuauSolverV2, true},
+        {FFlag::LuauSubtypingHandlesExternTypesWithIndexers, true}
+    };
+
+    loadDefinition(R"(
+        declare extern type Container with
+            [string | number]: boolean | string
+        end
+
+        declare extern type Point with
+            X: number
+            Y: number
+        end
+    )");
+
+    CheckResult result = check(R"(
+        local c: Container
+        local p: Point
+        local _: { [ string | number ]: boolean | string } = c -- OK
+        local _: { [string]: boolean | string } = c -- not OK
+        local _: { [ string | number ]: boolean } = c -- not OK
+        local _: { [string]: number } = p -- not OK
+    )");
+    LUAU_REQUIRE_ERROR_COUNT(3, result);
+    for (const auto& err: result.errors)
+        CHECK(get<TypeMismatch>(err));
 }
 
 TEST_SUITE_END();
