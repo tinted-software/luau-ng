@@ -23,7 +23,11 @@ stdenv.mkDerivation {
 
   doCheck = true;
 
-  outputs = ["bin" "out" "dev"];
+  outputs = [
+    "bin"
+    "out"
+    "dev"
+  ];
 
   # Don't enable LTO with gcc because ld.bfd is very slow
   cmakeFlags = lib.optionals (stdenv.hostPlatform.useLLVM) [
